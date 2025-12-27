@@ -138,15 +138,14 @@ pub fn mouse_move(_x: i32, _y: i32) {
 /// Convert string key name to enigo Key
 #[cfg(windows)]
 fn string_to_enigo_key(key: &str) -> Option<Key> {
-    let key_upper = key.to_uppercase();
-    
-    // Handle single characters
-    if key_upper.len() == 1 {
-        let c = key_upper.chars().next()?;
+    // Handle single characters - use lowercase to avoid keyboard layout mapping issues
+    if key.len() == 1 {
+        let c = key.chars().next()?.to_ascii_lowercase();
         return Some(Key::Unicode(c));
     }
     
     // Handle special keys
+    let key_upper = key.to_uppercase();
     match key_upper.as_str() {
         "F1" => Some(Key::F1),
         "F2" => Some(Key::F2),
