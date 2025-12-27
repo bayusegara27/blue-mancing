@@ -8,6 +8,18 @@
 
 A fishing automation script for Blue Protocol: Star Resonance.
 
+## About
+
+This application is now available in two versions:
+- **Python version** - Original implementation using Python with pynput, OpenCV, and pywebview
+- **Rust version** - New high-performance implementation using Rust with tokio async runtime
+
+The Rust version provides:
+- Faster async handling with tokio runtime
+- Better memory management and performance
+- Native Windows API integration
+- Same functionality as the Python version
+
 ## Download
 
 https://github.com/rdsp04/bpsr-fishing/releases/latest
@@ -28,6 +40,60 @@ only available on windows
 - Press **F9** to start the macro.
 - Press **F10** to stop the macro.
 - The script now keeps track of catches, fish types, XP, and sessions.
+
+## Building from Source
+
+### Python Version
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Or using uv
+uv sync
+
+# Run
+python main.py
+```
+
+### Rust Version
+
+```bash
+# Build release version (Windows)
+cargo build --release
+
+# Run
+cargo run --release
+```
+
+**Requirements for Rust build:**
+- Rust toolchain (1.70+)
+- Windows SDK (for Windows API bindings)
+- Visual Studio Build Tools
+
+## Automated Releases
+
+This project uses GitHub Actions to automatically build and publish releases.
+
+### Creating a New Release
+
+1. **Via Git Tag** (Recommended):
+   ```bash
+   git tag v1.2.2
+   git push origin v1.2.2
+   ```
+   This will trigger the workflow and create a release automatically.
+
+2. **Via GitHub Actions UI**:
+   - Go to Actions → "Build and Release"
+   - Click "Run workflow"
+   - Enter the version number (e.g., `1.2.2`)
+   - Click "Run workflow"
+
+The workflow will:
+- Build the Rust application for Windows
+- Create an NSIS installer (`bpsr-fishing_x.x.x_x64-Setup.exe`)
+- Create a GitHub release with the installer and standalone executable
 
 ## FAQ
 
