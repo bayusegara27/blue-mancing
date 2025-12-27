@@ -71,6 +71,30 @@ cargo run --release
 - Windows SDK (for Windows API bindings)
 - Visual Studio Build Tools
 
+## Automated Releases
+
+This project uses GitHub Actions to automatically build and publish releases.
+
+### Creating a New Release
+
+1. **Via Git Tag** (Recommended):
+   ```bash
+   git tag v1.2.2
+   git push origin v1.2.2
+   ```
+   This will trigger the workflow and create a release automatically.
+
+2. **Via GitHub Actions UI**:
+   - Go to Actions → "Build and Release"
+   - Click "Run workflow"
+   - Enter the version number (e.g., `1.2.2`)
+   - Click "Run workflow"
+
+The workflow will:
+- Build the Rust application for Windows
+- Create an NSIS installer (`bpsr-fishing_x.x.x_x64-Setup.exe`)
+- Create a GitHub release with the installer and standalone executable
+
 ## FAQ
 
 - If the script presses the **Exit** button instead of **Continue**, restart the script.
