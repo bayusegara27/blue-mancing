@@ -12,7 +12,10 @@ UninstallIcon "icons/icon.ico"
 
 !define AppName "bpsr-fishing"
 !define AppId "bpsr-fishing"
-!define AppVersion "1.2.1"
+; AppVersion can be passed from command line: makensis /DAppVersion=x.y.z installer.nsi
+!ifndef AppVersion
+  !define AppVersion "1.2.1"
+!endif
 !define AppExecutable "bpsr-fishing.exe"
 !define InstallerFile "${AppName}_${AppVersion}_x64-Setup.exe"
 !define LicenseFile "LICENSE"
