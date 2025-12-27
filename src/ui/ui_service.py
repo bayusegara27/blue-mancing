@@ -46,12 +46,13 @@ def start_ui():
         "bpsr-fishing Overlay",
         html=overlay_html,
         js_api=overview_api,
-        frameless=True,
+        frameless=False,
         transparent=False,
         easy_drag=True,
-        width=310,
-        height=170,
-        resizable=False,
+        width=380,
+        height=220,
+        min_size=(300, 180),
+        resizable=True,
         on_top=True
     )
     windows[Window.OVERLAY.value] = overlay_window

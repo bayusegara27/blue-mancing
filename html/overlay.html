@@ -135,25 +135,6 @@
       background: rgba(239, 68, 68, 0.4);
     }
 
-    .window-controls {
-      display: flex;
-      gap: 6px;
-    }
-
-    .window-btn {
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      transition: color 0.25s, transform 0.2s, filter 0.3s;
-      padding: 2px 6px;
-    }
-
-    .window-btn:hover {
-      color: #2c5f9c; filter: drop-shadow(0 0 4px rgba(62, 113, 175, 0.8));
-      transform: scale(1.15);
-    }
-
     .stats-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -274,10 +255,6 @@
     <!-- Header -->
     <div class="header">
       <span class="title">BPSR Fishing Bot</span>
-      <div class="window-controls">
-        <button id="minimize-btn" class="window-btn" title="Minimize"><i class="fa-solid fa-minus fa-sm"></i></button>
-        <button id="close-btn" class="window-btn" title="Close"><i class="fa-solid fa-xmark fa-lg"></i></button>
-      </div>
     </div>
 
     <!-- Controls -->
@@ -328,8 +305,6 @@
     const indicator = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
     const timer = document.getElementById('timer');
-    const closeBtn = document.getElementById('close-btn');
-    const minimizeBtn = document.getElementById('minimize-btn');
     const activityEl = document.getElementById('activity');
 
     let startTime = null;
@@ -443,14 +418,6 @@
         setRunningState(false, wasRunning, 'Stopping...');
         activityEl.textContent = 'Bot stopped by user';
       }
-    });
-
-    minimizeBtn.addEventListener('click', function() {
-      sendToRust('minimize');
-    });
-
-    closeBtn.addEventListener('click', function() {
-      sendToRust('close');
     });
 
     // Legacy pywebview compatibility - map to new IPC
