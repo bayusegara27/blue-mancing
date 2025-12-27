@@ -143,9 +143,8 @@ pub fn start_ui() {
     let overlay_window = WindowBuilder::new()
         .with_title("bpsr-fishing Overlay")
         .with_inner_size(tao::dpi::LogicalSize::new(380, 220))
-        .with_min_inner_size(tao::dpi::LogicalSize::new(300, 180))
-        .with_resizable(true)
-        .with_decorations(true)
+        .with_resizable(false)
+        .with_decorations(false)
         .with_always_on_top(true)
         .build(&event_loop)
         .expect("Failed to create overlay window");

@@ -147,15 +147,6 @@ fn handle_stop_key(state: &Arc<MacroState>) {
         return;
     }
     
-    // Release any held keys/mouse to prevent getting stuck
-    mouse_release();
-    if let Some(key) = get_pykey("left_key") {
-        release_key(&key);
-    }
-    if let Some(key) = get_pykey("right_key") {
-        release_key(&key);
-    }
-    
     // End session
     if let Some(last) = sessions.last_mut() {
         last.stop = Some(Utc::now().to_rfc3339());
@@ -304,14 +295,6 @@ fn post_catch_loop(
                 println!("Continue button found, releasing click");
                 mouse_release();
                 
-                // Release any held movement keys to prevent getting stuck
-                if let Some(key) = get_pykey("left_key") {
-                    release_key(&key);
-                }
-                if let Some(key) = get_pykey("right_key") {
-                    release_key(&key);
-                }
-                
                 // Detect fish type
                 SHARED_STATE.set_activity(BotActivity::DetectingFishType);
                 SHARED_STATE.set_detail_message("Detecting fish type...");
@@ -388,14 +371,6 @@ fn post_catch_loop(
                 SHARED_STATE.set_detail_message("Minigame failed, fish escaped!");
                 mouse_release();
                 
-                // Release any held movement keys to prevent getting stuck
-                if let Some(key) = get_pykey("left_key") {
-                    release_key(&key);
-                }
-                if let Some(key) = get_pykey("right_key") {
-                    release_key(&key);
-                }
-                
                 // Update stats
                 {
                     let mut stats = state.session_stats.lock();
@@ -431,15 +406,6 @@ fn handle_no_progress_loop(
     println!("No progress detected, performing recovery...");
     SHARED_STATE.set_activity(BotActivity::RecoveringFromTimeout);
     SHARED_STATE.set_detail_message("No progress for 45s, recovering...");
-    
-    // Release mouse and keys before recovery to prevent getting stuck
-    mouse_release();
-    if let Some(key) = get_pykey("left_key") {
-        release_key(&key);
-    }
-    if let Some(key) = get_pykey("right_key") {
-        release_key(&key);
-    }
     
     let esc_key = get_pykey("esc_key");
     let fish_key = get_pykey("fish_key");
