@@ -33,6 +33,7 @@ use utils::path::get_data_dir;
 use utils::keybinds::{get_keys, get_pykey, string_to_code};
 use utils::updater::{check_for_update_blocking, APP_VERSION};
 use utils::spelling::fix_spelling;
+use utils::bot_state::{SHARED_STATE, BotActivity};
 use log_main::{load_sessions, save_sessions, Session, log_catch, log_broken_rod};
 use input::{click, press_key, hold_key, release_key, mouse_press, mouse_release, mouse_move};
 use window::{select_window, get_window_rect, focus_blue_protocol_window};
@@ -73,12 +74,15 @@ impl MacroState {
         }
     }
     
+    /// Check if bot is running - uses SHARED_STATE as the single source of truth
     fn is_running(&self) -> bool {
-        self.running.load(Ordering::SeqCst)
+        SHARED_STATE.is_running()
     }
     
+    /// Set running state - updates both local and shared state
     fn set_running(&self, running: bool) {
         self.running.store(running, Ordering::SeqCst);
+        SHARED_STATE.set_running(running);
     }
     
     fn update_progress(&self) {
@@ -92,10 +96,15 @@ impl MacroState {
 
 /// Handle start key press
 fn handle_start_key(state: &Arc<MacroState>) {
+    SHARED_STATE.set_activity(BotActivity::SelectingWindow);
+    SHARED_STATE.set_detail_message("Looking for Blue Protocol window...");
+    
     let window_title = select_window();
     
     if window_title.is_none() {
         println!("No window found. Cannot start macro.");
+        SHARED_STATE.set_activity(BotActivity::Idle);
+        SHARED_STATE.set_detail_message("No game window found");
         return;
     }
     
@@ -104,6 +113,7 @@ fn handle_start_key(state: &Arc<MacroState>) {
     // Check if there's already an active session
     if !sessions.is_empty() && sessions.last().unwrap().stop.is_none() {
         println!("Session already started. Press stop first.");
+        SHARED_STATE.set_detail_message("Session already active");
         return;
     }
     
@@ -117,6 +127,13 @@ fn handle_start_key(state: &Arc<MacroState>) {
     *state.window_title.lock() = window_title.clone();
     state.set_running(true);
     state.update_progress();
+    
+    // Reset stats for new session
+    *state.session_stats.lock() = SessionStats::default();
+    SHARED_STATE.reset_stats();
+    
+    SHARED_STATE.set_activity(BotActivity::WaitingForDefaultScreen);
+    SHARED_STATE.set_detail_message(format!("Connected to: {}", window_title.as_ref().unwrap_or(&"Unknown".to_string())));
     
     println!("Macro started on window: {:?}", window_title);
 }
@@ -140,6 +157,9 @@ fn handle_stop_key(state: &Arc<MacroState>) {
     *state.saved_continue_pos.lock() = None;
     *state.window_title.lock() = None;
     
+    SHARED_STATE.set_activity(BotActivity::Stopped);
+    SHARED_STATE.set_detail_message("Bot stopped by user");
+    
     println!("Macro stopped");
 }
 
@@ -151,6 +171,8 @@ fn post_catch_loop(
     window_title: &str,
 ) {
     println!("Fish took the bait");
+    SHARED_STATE.set_activity(BotActivity::FishDetected);
+    SHARED_STATE.set_detail_message("Fish took the bait!");
     state.update_progress();
     
     let mut counter = 0;
@@ -159,6 +181,9 @@ fn post_catch_loop(
     let mut lane = 0i32;
     
     mouse_press();
+    
+    SHARED_STATE.set_activity(BotActivity::PlayingMinigame);
+    SHARED_STATE.set_detail_message("Holding click for minigame...");
     
     while state.is_running() {
         // Check for no progress timeout
@@ -181,12 +206,17 @@ fn post_catch_loop(
         if let Some(ref arrow_name) = arrow {
             if score > 0.8 {
                 state.update_progress();
+                SHARED_STATE.set_activity(BotActivity::DetectingArrow);
                 
                 if arrow_name.contains("right") {
                     lane = (lane + 1).min(1);
+                    SHARED_STATE.set_activity(BotActivity::MovingRight);
+                    SHARED_STATE.set_detail_message(format!("Arrow RIGHT detected, lane = {}", lane));
                     println!("Right arrow detected, lane = {}", lane);
                 } else if arrow_name.contains("left") {
                     lane = (lane - 1).max(-1);
+                    SHARED_STATE.set_activity(BotActivity::MovingLeft);
+                    SHARED_STATE.set_detail_message(format!("Arrow LEFT detected, lane = {}", lane));
                     println!("Left arrow detected, lane = {}", lane);
                 }
                 
@@ -205,6 +235,7 @@ fn post_catch_loop(
                 }
             }
             0 => {
+                SHARED_STATE.set_activity(BotActivity::CenterLane);
                 if let Some(key) = get_pykey("left_key") {
                     release_key(&key);
                 }
@@ -226,6 +257,7 @@ fn post_catch_loop(
         // Print tick count periodically
         if last_print_time.elapsed() >= Duration::from_secs(1) {
             println!("Held for {} ticks", counter);
+            SHARED_STATE.set_detail_message(format!("Minigame: {} ticks, lane = {}", counter, lane));
             last_print_time = Instant::now();
         }
         
@@ -251,6 +283,8 @@ fn post_catch_loop(
             
             if let Some(pos) = continue_found {
                 state.update_progress();
+                SHARED_STATE.set_activity(BotActivity::WaitingForContinue);
+                SHARED_STATE.set_detail_message("Continue button found!");
                 
                 // Save continue position
                 let mut saved_pos = state.saved_continue_pos.lock();
@@ -262,15 +296,20 @@ fn post_catch_loop(
                 mouse_release();
                 
                 // Detect fish type
+                SHARED_STATE.set_activity(BotActivity::DetectingFishType);
+                SHARED_STATE.set_detail_message("Detecting fish type...");
+                
                 let fish_folder = base.join(TARGET_IMAGES_FOLDER).join(&res_folder).join("fish");
                 let mut fish_type: Option<String> = None;
                 
                 if fish_folder.exists() {
-                    for _ in 0..3 {
+                    for attempt in 0..3 {
+                        SHARED_STATE.set_detail_message(format!("Detecting fish (attempt {}/3)...", attempt + 1));
                         let (detected, score) = image_service.find_best_matching_fish(Some(rect), None);
                         if let Some(ref ft) = detected {
                             if score >= 0.7 {
                                 println!("Detected fish type: {} (score: {:.3})", ft, score);
+                                SHARED_STATE.set_detail_message(format!("Caught: {} ({:.0}% match)", ft, score * 100.0));
                                 fish_type = Some(ft.clone());
                                 break;
                             }
@@ -295,15 +334,22 @@ fn post_catch_loop(
                     } else {
                         0.0
                     };
+                    
+                    // Sync to shared state for UI
+                    SHARED_STATE.update_stats(stats.catches, stats.misses, stats.xp);
                 }
                 
                 // Log the catch
                 log_catch(true, fish_type);
                 
                 // Click continue button with retries
-                for _ in 0..3 {
+                SHARED_STATE.set_activity(BotActivity::ClickingContinue);
+                SHARED_STATE.set_detail_message("Clicking continue button...");
+                
+                for retry in 0..3 {
                     if let Some(continue_pos) = *state.saved_continue_pos.lock() {
                         click(continue_pos.0, continue_pos.1);
+                        SHARED_STATE.set_detail_message(format!("Click attempt {}/3", retry + 1));
                         thread::sleep(Duration::from_millis(500));
                     }
                     
@@ -316,9 +362,13 @@ fn post_catch_loop(
                     }
                 }
                 
+                SHARED_STATE.set_activity(BotActivity::WaitingForDefaultScreen);
+                SHARED_STATE.set_detail_message("Ready for next catch");
                 return;
             } else if default_found.is_some() {
                 println!("Default screen detected, minigame failed. Releasing click.");
+                SHARED_STATE.set_activity(BotActivity::MinigameFailed);
+                SHARED_STATE.set_detail_message("Minigame failed, fish escaped!");
                 mouse_release();
                 
                 // Update stats
@@ -331,9 +381,16 @@ fn post_catch_loop(
                     } else {
                         0.0
                     };
+                    
+                    // Sync to shared state for UI
+                    SHARED_STATE.update_stats(stats.catches, stats.misses, stats.xp);
                 }
                 
                 log_catch(false, None);
+                
+                thread::sleep(Duration::from_millis(500));
+                SHARED_STATE.set_activity(BotActivity::WaitingForDefaultScreen);
+                SHARED_STATE.set_detail_message("Ready for next catch");
                 return;
             }
         }
@@ -347,6 +404,8 @@ fn handle_no_progress_loop(
     window_title: &str,
 ) {
     println!("No progress detected, performing recovery...");
+    SHARED_STATE.set_activity(BotActivity::RecoveringFromTimeout);
+    SHARED_STATE.set_detail_message("No progress for 45s, recovering...");
     
     let esc_key = get_pykey("esc_key");
     let fish_key = get_pykey("fish_key");
@@ -356,6 +415,8 @@ fn handle_no_progress_loop(
             Some(r) => r,
             None => {
                 state.set_running(false);
+                SHARED_STATE.set_activity(BotActivity::Stopped);
+                SHARED_STATE.set_detail_message("Game window lost");
                 thread::sleep(Duration::from_secs(1));
                 continue;
             }
@@ -368,6 +429,7 @@ fn handle_no_progress_loop(
         
         if image_service.find_image_in_window(Some(rect), &default_path, 0.9).is_some() {
             println!("Default screen detected, stopping recovery loop.");
+            SHARED_STATE.set_detail_message("Recovery successful, restarting...");
             state.update_progress();
             
             // Restart macro
@@ -379,6 +441,7 @@ fn handle_no_progress_loop(
         
         // Perform recovery actions
         println!("No progress detected, performing recovery actions...");
+        SHARED_STATE.set_detail_message("Pressing ESC and fish key...");
         
         if let Some(ref key) = esc_key {
             press_key(key);
@@ -398,8 +461,26 @@ fn handle_no_progress_loop(
 /// Main fishing loop
 fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: FishService) {
     println!("Macro waiting for START key ({:?})", get_keys().0);
+    SHARED_STATE.set_activity(BotActivity::WaitingForStart);
+    SHARED_STATE.set_detail_message(format!("Press {} to start", get_keys().0));
     
     loop {
+        // Sync local state with shared state (UI can start/stop the bot)
+        let shared_running = SHARED_STATE.is_running();
+        let local_running = state.running.load(Ordering::SeqCst);
+        
+        // Check if UI started the bot (shared is running but local isn't initialized)
+        if shared_running && !local_running && state.window_title.lock().is_none() {
+            // UI started the bot, trigger start sequence
+            handle_start_key(&state);
+        }
+        
+        // Check if UI stopped the bot
+        if !shared_running && local_running {
+            // UI stopped the bot, trigger stop sequence
+            handle_stop_key(&state);
+        }
+        
         if !state.is_running() {
             thread::sleep(Duration::from_millis(100));
             continue;
@@ -422,6 +503,7 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
         let rect = match get_window_rect(&window_title) {
             Some(r) => r,
             None => {
+                SHARED_STATE.set_detail_message("Waiting for game window...");
                 thread::sleep(CHECK_INTERVAL);
                 continue;
             }
@@ -436,6 +518,8 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
         if image_service.find_image_in_window(Some(rect), &default_path, THRESHOLD).is_some() {
             state.update_progress();
             println!("Default screen detected");
+            SHARED_STATE.set_activity(BotActivity::WaitingForDefaultScreen);
+            SHARED_STATE.set_detail_message("Fishing spot found");
             thread::sleep(Duration::from_millis(200));
             
             // Check for broken rod
@@ -443,6 +527,8 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
             
             if image_service.find_image_in_window(Some(rect), &broken_path, 0.9).is_some() {
                 println!("Broken pole detected -> pressing rods key");
+                SHARED_STATE.set_activity(BotActivity::HandlingBrokenRod);
+                SHARED_STATE.set_detail_message("Broken rod! Selecting new rod...");
                 state.update_progress();
                 
                 log_broken_rod();
@@ -457,6 +543,8 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
                 let use_rod_path = base.join(TARGET_IMAGES_FOLDER).join(&res_folder).join("use_rod.png");
                 
                 if let Some(pos) = image_service.find_image_in_window(Some(rect), &use_rod_path, 0.9) {
+                    SHARED_STATE.set_activity(BotActivity::SelectingNewRod);
+                    SHARED_STATE.set_detail_message("Clicking Use Rod button...");
                     state.update_progress();
                     click(pos.0, pos.1);
                     thread::sleep(Duration::from_secs(1));
@@ -468,11 +556,18 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
             // Start fishing - left click at center of window
             let center_x = rect.0 + (rect.2 - rect.0) / 2;
             let center_y = rect.1 + (rect.3 - rect.1) / 2;
+            
+            SHARED_STATE.set_activity(BotActivity::CastingLine);
+            SHARED_STATE.set_detail_message("Casting fishing line...");
+            
             click(center_x, center_y);
             println!("Started fishing -> waiting for catch_fish.png");
             state.update_progress();
             
             thread::sleep(Duration::from_secs(1));
+            
+            SHARED_STATE.set_activity(BotActivity::WaitingForFish);
+            SHARED_STATE.set_detail_message("Waiting for fish to bite...");
             
             // Wait for fish to bite
             while state.is_running() {
@@ -506,10 +601,15 @@ fn main() {
     println!("BPSR Fishing Bot {}", APP_VERSION);
     println!("================================");
     
+    // Initialize shared state
+    SHARED_STATE.set_activity(BotActivity::Idle);
+    SHARED_STATE.set_detail_message("Initializing...");
+    
     // Fix spelling in logs
     fix_spelling();
     
     // Check for updates
+    SHARED_STATE.set_detail_message("Checking for updates...");
     if let Some(update) = check_for_update_blocking() {
         println!("New version available: {}", update.version);
         // In full implementation, would show update UI and download
@@ -520,6 +620,7 @@ fn main() {
     }
     
     // Initialize services
+    SHARED_STATE.set_detail_message("Loading configuration...");
     let base = get_data_dir();
     let config_path = base.join("config").join("fish_config.json");
     

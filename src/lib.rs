@@ -16,4 +16,4 @@ pub mod window;
 pub use fish::{Fish, Rarity, FishService};
 pub use screen_reader::{ScreenService, ImageService, get_resolution_folder};
 pub use ui::{start_ui, Window, StatsApi, OverviewApi};
-pub use utils::{path::get_data_dir, keybinds, updater, spelling};
+pub use utils::{path::get_data_dir, keybinds, updater, spelling, bot_state};

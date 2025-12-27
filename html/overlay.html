@@ -72,44 +72,81 @@
       border: 1px solid rgba(255, 255, 255, 0.08);
       box-shadow: 0 0 25px rgba(0, 90, 180, 0.35);
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 16px;
-      width: 340px;
-      height: 150px;
+      flex-direction: column;
+      padding: 12px 16px;
+      width: 360px;
+      min-height: 200px;
       background: rgba(10, 20, 40, 0.75);
       border-radius: 14px;
     }
 
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #38c6ff;
+      text-shadow: 0 0 8px rgba(56, 198, 255, 0.5);
+    }
+
     .divider {
-      width: 1px;
-      height: 48px;
+      width: 100%;
+      height: 1px;
       background: rgba(255, 255, 255, 0.1);
-      margin: 0 10px;
+      margin: 8px 0;
     }
 
     .control-btn {
       transition: all 0.25s ease;
       font-weight: 600;
-      padding: 3px 8px;
+      padding: 6px 12px;
       font-size: 11px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
     }
 
     .control-btn:hover {
       transform: scale(1.05);
     }
 
+    .btn-start {
+      background: rgba(34, 197, 94, 0.3);
+      border: 1px solid rgba(34, 197, 94, 0.5);
+      color: #4ade80;
+    }
+
+    .btn-start:hover {
+      background: rgba(34, 197, 94, 0.4);
+    }
+
+    .btn-stop {
+      background: rgba(239, 68, 68, 0.3);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #f87171;
+    }
+
+    .btn-stop:hover {
+      background: rgba(239, 68, 68, 0.4);
+    }
+
     .window-controls {
-      position: absolute;
-      top: 12px;
-      right: 10px;
       display: flex;
       gap: 6px;
     }
 
     .window-btn {
+      background: none;
+      border: none;
       color: white;
+      cursor: pointer;
       transition: color 0.25s, transform 0.2s, filter 0.3s;
+      padding: 2px 6px;
     }
 
     .window-btn:hover {
@@ -117,12 +154,21 @@
       transform: scale(1.15);
     }
 
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
     .stat-line {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 10px;
+      border-radius: 6px;
       gap: 8px;
-      line-height: 1.3;
     }
 
     .stat-line i {
@@ -138,6 +184,79 @@
     .fa-power-off { color: #d1d5db; filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.3)); }
     .fa-clock { color: #93c5fd; filter: drop-shadow(0 0 4px rgba(147, 197, 253, 0.8)); }
 
+    .status-section {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .status-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 6px #ff3b3b;
+    }
+
+    .status-dot.running {
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 6px #22c55e; }
+      50% { opacity: 0.7; box-shadow: 0 0 12px #22c55e; }
+    }
+
+    .status-text {
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .status-text.running { color: #4ade80; }
+    .status-text.stopped { color: #f87171; }
+
+    .activity-box {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      padding: 8px 10px;
+      min-height: 40px;
+    }
+
+    .activity-label {
+      font-size: 10px;
+      color: #64748b;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .activity-text {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.4;
+    }
+
+    .timer {
+      font-size: 12px;
+      color: #60a5fa;
+      font-family: monospace;
+    }
+
 </style>
 <body class="flex items-center justify-center w-screen h-screen">
 
@@ -152,116 +271,200 @@
 
   <!-- Overlay -->
   <div class="overlay">
-    <!-- Status -->
-    <div class="flex flex-col items-center text-xs">
-      <div id="status-indicator" class="status-dot w-4 h-4 rounded-full bg-red-500 shadow-[0_0_6px_#ff3b3b] mb-1"></div>
-      <div class="flex items-center gap-2 text-gray-300">
-        <i class="fa-solid fa-power-off"></i>
-        <span id="status-text">Stopped</span>
+    <!-- Header -->
+    <div class="header">
+      <span class="title">BPSR Fishing Bot</span>
+      <div class="window-controls">
+        <button id="minimize-btn" class="window-btn" title="Minimize"><i class="fa-solid fa-minus fa-sm"></i></button>
+        <button id="close-btn" class="window-btn" title="Close"><i class="fa-solid fa-xmark fa-lg"></i></button>
       </div>
-      <div class="flex items-center gap-1 mt-1 text-sky-50 text-xs">
-        <i class="fa-solid fa-clock text-sky-50"></i>
-        <span id="timer">00:00:00</span>
-      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="flex gap-2 mb-3">
+      <button id="start-btn" class="control-btn btn-start flex items-center gap-2 flex-1">
+        <i class="fa-solid fa-play"></i>
+        <span>Start</span>
+      </button>
+      <button id="stop-btn" class="control-btn btn-stop flex items-center gap-2 flex-1">
+        <i class="fa-solid fa-stop"></i>
+        <span>Stop</span>
+      </button>
     </div>
 
     <div class="divider"></div>
 
     <!-- Stats -->
-    <div class="flex flex-col text-xs gap-0.5">
-      <div class="stat-line"><i class="fa-solid fa-fish"></i><span>Catches</span><span id="stat-catches">0</span></div>
-      <div class="stat-line"><i class="fa-solid fa-wind"></i><span>Misses</span><span id="stat-misses">0</span></div>
-      <div class="stat-line"><i class="fa-solid fa-brain"></i><span>XP</span><span id="stat-xp">0</span></div>
-      <div class="stat-line"><i class="fa-solid fa-percent"></i><span>Rate</span><span id="stat-rate">0%</span></div>
+    <div class="stats-grid">
+      <div class="stat-line"><i class="fa-solid fa-fish"></i><span class="text-xs text-gray-400">Catches</span><span id="stat-catches" class="text-sm font-bold text-green-400">0</span></div>
+      <div class="stat-line"><i class="fa-solid fa-wind"></i><span class="text-xs text-gray-400">Misses</span><span id="stat-misses" class="text-sm font-bold text-red-400">0</span></div>
+      <div class="stat-line"><i class="fa-solid fa-brain"></i><span class="text-xs text-gray-400">XP</span><span id="stat-xp" class="text-sm font-bold text-cyan-400">0</span></div>
+      <div class="stat-line"><i class="fa-solid fa-percent"></i><span class="text-xs text-gray-400">Rate</span><span id="stat-rate" class="text-sm font-bold text-teal-400">0%</span></div>
     </div>
 
     <div class="divider"></div>
 
-    <!-- Buttons -->
-    <div class="flex flex-col gap-2 items-center justify-center">
-      <button id="start-btn"
-        class="control-btn rounded-md bg-green-600/20 border border-green-500/40 hover:bg-green-500/30 flex items-center gap-2 px-3 py-1">
-        <i class="fa-solid fa-play text-green-400"></i>
-        <span>Start</span>
-      </button>
-
-      <button id="stop-btn"
-        class="control-btn rounded-md bg-red-600/20 border border-red-500/40 hover:bg-red-500/30 flex items-center gap-2 px-3 py-1">
-        <i class="fa-solid fa-stop text-red-400"></i>
-        <span>Stop</span>
-      </button>
-    </div>
-
-    <div class="window-controls">
-      <button id="minimize-btn" class="window-btn" title="Minimize"><i class="fa-solid fa-minus fa-sm"></i></button>
-      <button id="close-btn" class="window-btn" title="Close"><i class="fa-solid fa-xmark fa-lg"></i></button>
+    <!-- Status Section -->
+    <div class="status-section">
+      <div class="status-header">
+        <div class="status-indicator">
+          <div id="status-dot" class="status-dot"></div>
+          <span id="status-text" class="status-text stopped">Stopped</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-clock text-sky-400 text-xs"></i>
+          <span id="timer" class="timer">00:00:00</span>
+        </div>
+      </div>
+      
+      <div class="activity-box">
+        <div class="activity-label">Current Activity</div>
+        <div id="activity" class="activity-text">Waiting for start...</div>
+      </div>
     </div>
   </div>
 
   <script>
-    const indicator = document.getElementById('status-indicator');
+    const indicator = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
     const timer = document.getElementById('timer');
     const closeBtn = document.getElementById('close-btn');
     const minimizeBtn = document.getElementById('minimize-btn');
+    const activityEl = document.getElementById('activity');
 
-        let startTime = null;
-        let elapsedTime = 0;
-        let timerInterval = null;
-        let botRunning = false;
+    let startTime = null;
+    let elapsedTime = 0;
+    let timerInterval = null;
+    let botRunning = false;
 
-        window.toggleBotStatus = function (state) {
-            setStatus(state);
-        };
+    // IPC handler for wry - sends message to Rust backend
+    function sendToRust(action) {
+      if (window.ipc) {
+        window.ipc.postMessage(JSON.stringify({ action: action }));
+      }
+    }
 
+    // Called from Rust to update the UI with bot state
+    window.updateFromRust = function(data) {
+      // Update stats
+      if (data.stats) {
+        document.getElementById('stat-catches').textContent = data.stats.catches || 0;
+        document.getElementById('stat-misses').textContent = data.stats.misses || 0;
+        document.getElementById('stat-xp').textContent = data.stats.xp || 0;
+        document.getElementById('stat-rate').textContent = (data.stats.rate || '0') + '%';
+      }
 
-        window.updateStats = function (data) {
-            if (data.catches !== undefined) document.getElementById('stat-catches').textContent = data.catches;
-            if (data.misses !== undefined) document.getElementById('stat-misses').textContent = data.misses;
-            if (data.xp !== undefined) document.getElementById('stat-xp').textContent = data.xp;
-            if (data.rate !== undefined) document.getElementById('stat-rate').textContent = data.rate + '%';
-        };
+      // Update running status
+      const wasRunning = botRunning;
+      botRunning = data.running;
 
-        function setStatus(state) {
-            botRunning = state === 'running';
+      // Use shared function to update UI
+      setRunningState(botRunning, wasRunning);
 
-            if (botRunning) {
-                indicator.className = 'status-dot w-4 h-4 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e] mb-1';
-                statusText.textContent = 'Running';
-                statusText.className = 'text-green-300';
-
-                startTime = new Date() - elapsedTime;
-                if (!timerInterval) timerInterval = setInterval(updateTimer, 1000);
-            } else {
-                indicator.className = 'status-dot w-4 h-4 rounded-full bg-red-500 shadow-[0_0_6px_#ff3b3b] mb-1';
-                statusText.textContent = 'Stopped';
-                statusText.className = 'text-red-300';
-
-                clearInterval(timerInterval);
-                timerInterval = null;
-                elapsedTime = new Date() - startTime;
-            }
+      // Update activity text with detailed status
+      if (data.activity) {
+        let activityText = data.activity;
+        if (data.detail && data.detail.length > 0) {
+          activityText = data.detail;
         }
+        activityEl.textContent = activityText;
+      }
+    };
 
+    // Shared function to update running state UI
+    function setRunningState(running, wasRunning, statusOverride) {
+      if (running) {
+        indicator.classList.add('running');
+        statusText.classList.remove('stopped');
+        statusText.classList.add('running');
+        statusText.textContent = statusOverride || 'Running';
 
-        function updateTimer() {
-            const diff = new Date() - startTime;
-            const h = String(Math.floor(diff / 3600000)).padStart(2, '0');
-            const m = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
-            const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
-            timer.textContent = `${h}:${m}:${s}`;
+        // Start timer if just started
+        if (!wasRunning) {
+          startTime = new Date() - elapsedTime;
+          if (!timerInterval) {
+            timerInterval = setInterval(updateTimer, 1000);
+          }
         }
+      } else {
+        indicator.classList.remove('running');
+        statusText.classList.remove('running');
+        statusText.classList.add('stopped');
+        statusText.textContent = statusOverride || 'Stopped';
 
-        document.getElementById('start-btn').addEventListener('click', () =>  window.pywebview.api.start_script());
-        document.getElementById('stop-btn').addEventListener('click', () =>  window.pywebview.api.stop_script());
+        // Pause timer if just stopped (don't reset)
+        if (wasRunning && startTime) {
+          elapsedTime = new Date() - startTime;
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+      }
+    }
 
-        minimizeBtn.addEventListener('click', () => {
-            if (window.pywebview) window.pywebview.api.minimize_window();
-        });
+    // Legacy function for backward compatibility
+    window.toggleBotStatus = function(state) {
+      const isRunning = state === 'running';
+      window.updateFromRust({ running: isRunning, activity: isRunning ? 'Running' : 'Stopped' });
+    };
 
-        closeBtn.addEventListener('click', () => {
-            if (window.pywebview) window.pywebview.api.close_window();
-        });
-    </script>
+    window.updateStats = function(data) {
+      window.updateFromRust({ stats: data, running: botRunning });
+    };
+
+    function updateTimer() {
+      if (!startTime) return;
+      const diff = new Date() - startTime;
+      const h = String(Math.floor(diff / 3600000)).padStart(2, '0');
+      const m = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
+      const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
+      timer.textContent = `${h}:${m}:${s}`;
+    }
+
+    // Button click handlers using wry IPC
+    document.getElementById('start-btn').addEventListener('click', function() {
+      sendToRust('start');
+      // Optimistic UI update using shared function
+      if (!botRunning) {
+        const wasRunning = botRunning;
+        botRunning = true;
+        setRunningState(true, wasRunning, 'Starting...');
+        activityEl.textContent = 'Initializing...';
+        startTime = new Date();
+        elapsedTime = 0;
+      }
+    });
+
+    document.getElementById('stop-btn').addEventListener('click', function() {
+      sendToRust('stop');
+      // Optimistic UI update using shared function
+      if (botRunning) {
+        const wasRunning = botRunning;
+        botRunning = false;
+        setRunningState(false, wasRunning, 'Stopping...');
+        activityEl.textContent = 'Bot stopped by user';
+      }
+    });
+
+    minimizeBtn.addEventListener('click', function() {
+      sendToRust('minimize');
+    });
+
+    closeBtn.addEventListener('click', function() {
+      sendToRust('close');
+    });
+
+    // Legacy pywebview compatibility - map to new IPC
+    window.pywebview = {
+      api: {
+        start_script: function() { sendToRust('start'); },
+        stop_script: function() { sendToRust('stop'); },
+        minimize_window: function() { sendToRust('minimize'); },
+        close_window: function() { sendToRust('close'); }
+      }
+    };
+
+    // Initial state
+    activityEl.textContent = 'Waiting for start...';
+  </script>
 </body>
 </html>
