@@ -358,11 +358,26 @@
       const wasRunning = botRunning;
       botRunning = data.running;
 
-      if (botRunning) {
+      // Use shared function to update UI
+      setRunningState(botRunning, wasRunning);
+
+      // Update activity text with detailed status
+      if (data.activity) {
+        let activityText = data.activity;
+        if (data.detail && data.detail.length > 0) {
+          activityText = data.detail;
+        }
+        activityEl.textContent = activityText;
+      }
+    };
+
+    // Shared function to update running state UI
+    function setRunningState(running, wasRunning, statusOverride) {
+      if (running) {
         indicator.classList.add('running');
         statusText.classList.remove('stopped');
         statusText.classList.add('running');
-        statusText.textContent = 'Running';
+        statusText.textContent = statusOverride || 'Running';
 
         // Start timer if just started
         if (!wasRunning) {
@@ -375,7 +390,7 @@
         indicator.classList.remove('running');
         statusText.classList.remove('running');
         statusText.classList.add('stopped');
-        statusText.textContent = 'Stopped';
+        statusText.textContent = statusOverride || 'Stopped';
 
         // Pause timer if just stopped (don't reset)
         if (wasRunning && startTime) {
@@ -384,16 +399,7 @@
           timerInterval = null;
         }
       }
-
-      // Update activity text with detailed status
-      if (data.activity) {
-        let activityText = data.activity;
-        if (data.detail && data.detail.length > 0) {
-          activityText = data.detail;
-        }
-        activityEl.textContent = activityText;
-      }
-    };
+    }
 
     // Legacy function for backward compatibility
     window.toggleBotStatus = function(state) {
@@ -417,37 +423,25 @@
     // Button click handlers using wry IPC
     document.getElementById('start-btn').addEventListener('click', function() {
       sendToRust('start');
-      // Optimistic UI update
+      // Optimistic UI update using shared function
       if (!botRunning) {
+        const wasRunning = botRunning;
         botRunning = true;
-        indicator.classList.add('running');
-        statusText.classList.remove('stopped');
-        statusText.classList.add('running');
-        statusText.textContent = 'Starting...';
+        setRunningState(true, wasRunning, 'Starting...');
         activityEl.textContent = 'Initializing...';
         startTime = new Date();
         elapsedTime = 0;
-        if (!timerInterval) {
-          timerInterval = setInterval(updateTimer, 1000);
-        }
       }
     });
 
     document.getElementById('stop-btn').addEventListener('click', function() {
       sendToRust('stop');
-      // Optimistic UI update
+      // Optimistic UI update using shared function
       if (botRunning) {
+        const wasRunning = botRunning;
         botRunning = false;
-        indicator.classList.remove('running');
-        statusText.classList.remove('running');
-        statusText.classList.add('stopped');
-        statusText.textContent = 'Stopping...';
+        setRunningState(false, wasRunning, 'Stopping...');
         activityEl.textContent = 'Bot stopped by user';
-        if (timerInterval) {
-          elapsedTime = new Date() - startTime;
-          clearInterval(timerInterval);
-          timerInterval = null;
-        }
       }
     });
 

@@ -47,7 +47,8 @@ pub fn register_window(window_type: Window, handle: WindowHandle) {
 /// Handle IPC message from JavaScript
 #[cfg(all(feature = "gui", windows))]
 fn handle_ipc_message(message: &str) -> Option<String> {
-    use crate::utils::bot_state;
+    use crate::utils::bot_state::SHARED_STATE;
+    use crate::utils::bot_state::BotActivity;
     
     // Parse the message as JSON
     let parsed: serde_json::Value = serde_json::from_str(message).ok()?;
@@ -56,16 +57,22 @@ fn handle_ipc_message(message: &str) -> Option<String> {
     match action {
         "start" => {
             println!("UI: Start button clicked");
-            bot_state::start_bot();
+            if !SHARED_STATE.is_running() {
+                SHARED_STATE.set_running(true);
+                SHARED_STATE.set_activity(BotActivity::SelectingWindow);
+                SHARED_STATE.set_detail_message("Starting from UI...");
+            }
             Some(r#"{"success": true, "action": "start"}"#.to_string())
         }
         "stop" => {
             println!("UI: Stop button clicked");
-            bot_state::stop_bot();
+            SHARED_STATE.set_running(false);
+            SHARED_STATE.set_activity(BotActivity::Stopped);
+            SHARED_STATE.set_detail_message("Stopped from UI");
             Some(r#"{"success": true, "action": "stop"}"#.to_string())
         }
         "getStatus" => {
-            Some(bot_state::get_status_json())
+            Some(SHARED_STATE.to_json())
         }
         "minimize" => {
             // Window minimize is handled by the window itself
@@ -80,6 +87,13 @@ fn handle_ipc_message(message: &str) -> Option<String> {
             None
         }
     }
+}
+
+/// Custom event types for the event loop
+#[cfg(all(feature = "gui", windows))]
+#[derive(Debug, Clone)]
+enum UserEvent {
+    UpdateOverlay,
 }
 
 /// Start the UI (main entry point)
@@ -157,10 +171,11 @@ pub fn start_ui() {
     });
     
     // Spawn a thread to periodically update the overlay with bot status
+    // Using 250ms interval to balance responsiveness and CPU usage
     let proxy_clone = proxy.clone();
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(250));
             
             // Send update event to main thread
             let _ = proxy_clone.send_event(UserEvent::UpdateOverlay);
@@ -199,13 +214,6 @@ pub fn start_ui() {
             _ => {}
         }
     });
-}
-
-/// User events for the event loop
-#[cfg(all(feature = "gui", windows))]
-#[derive(Debug, Clone)]
-enum UserEvent {
-    UpdateOverlay,
 }
 
 /// Start the UI (stub for non-Windows/non-GUI builds)

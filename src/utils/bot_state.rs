@@ -193,25 +193,3 @@ impl SharedBotState {
 
 /// Global shared state instance
 pub static SHARED_STATE: Lazy<SharedBotState> = Lazy::new(SharedBotState::new);
-
-/// Start the bot (called from UI)
-pub fn start_bot() {
-    if SHARED_STATE.is_running() {
-        return;
-    }
-    SHARED_STATE.set_running(true);
-    SHARED_STATE.set_activity(BotActivity::SelectingWindow);
-    SHARED_STATE.set_detail_message("Starting bot...");
-}
-
-/// Stop the bot (called from UI)
-pub fn stop_bot() {
-    SHARED_STATE.set_running(false);
-    SHARED_STATE.set_activity(BotActivity::Stopped);
-    SHARED_STATE.set_detail_message("Bot stopped by user");
-}
-
-/// Get current bot status as JSON
-pub fn get_status_json() -> String {
-    SHARED_STATE.to_json()
-}

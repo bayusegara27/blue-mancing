@@ -74,11 +74,12 @@ impl MacroState {
         }
     }
     
+    /// Check if bot is running - uses SHARED_STATE as the single source of truth
     fn is_running(&self) -> bool {
-        // Check both local state and shared state (UI button can also start/stop)
-        self.running.load(Ordering::SeqCst) || SHARED_STATE.is_running()
+        SHARED_STATE.is_running()
     }
     
+    /// Set running state - updates both local and shared state
     fn set_running(&self, running: bool) {
         self.running.store(running, Ordering::SeqCst);
         SHARED_STATE.set_running(running);
@@ -464,15 +465,19 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
     SHARED_STATE.set_detail_message(format!("Press {} to start", get_keys().0));
     
     loop {
-        // Check if UI started the bot
-        if SHARED_STATE.is_running() && !state.running.load(Ordering::SeqCst) {
-            // UI started the bot, trigger start
+        // Sync local state with shared state (UI can start/stop the bot)
+        let shared_running = SHARED_STATE.is_running();
+        let local_running = state.running.load(Ordering::SeqCst);
+        
+        // Check if UI started the bot (shared is running but local isn't initialized)
+        if shared_running && !local_running && state.window_title.lock().is_none() {
+            // UI started the bot, trigger start sequence
             handle_start_key(&state);
         }
         
         // Check if UI stopped the bot
-        if !SHARED_STATE.is_running() && state.running.load(Ordering::SeqCst) {
-            // UI stopped the bot, trigger stop
+        if !shared_running && local_running {
+            // UI stopped the bot, trigger stop sequence
             handle_stop_key(&state);
         }
         
