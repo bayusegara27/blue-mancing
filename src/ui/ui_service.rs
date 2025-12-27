@@ -101,7 +101,7 @@ enum UserEvent {
 pub fn start_ui() {
     use tao::{
         event::{Event, WindowEvent},
-        event_loop::{ControlFlow, EventLoop, EventLoopProxy},
+        event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy},
         window::WindowBuilder,
     };
     use wry::WebViewBuilder;
@@ -118,7 +118,7 @@ pub fn start_ui() {
     let main_html = fs::read_to_string(html_path.join("main.html"))
         .unwrap_or_else(|_| get_default_main_html().to_string());
     
-    let event_loop = EventLoop::<UserEvent>::with_user_event();
+    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
     
     // Create main window
@@ -154,8 +154,9 @@ pub fn start_ui() {
     // Build overlay webview with IPC handler
     let overlay_webview = WebViewBuilder::new()
         .with_html(&overlay_html)
-        .with_ipc_handler(move |message| {
-            if let Some(response) = handle_ipc_message(&message) {
+        .with_ipc_handler(move |request| {
+            let message = request.body();
+            if let Some(response) = handle_ipc_message(message) {
                 tracing::debug!("IPC response: {}", response);
             }
         })
@@ -195,7 +196,7 @@ pub fn start_ui() {
                     status_json
                 );
                 
-                if let Ok(webview) = overlay_webview_clone.try_lock() {
+                if let Some(webview) = overlay_webview_clone.try_lock() {
                     let _ = webview.evaluate_script(&js);
                 }
             }
