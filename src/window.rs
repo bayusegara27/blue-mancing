@@ -20,8 +20,8 @@ pub fn find_blue_protocol_window() -> Option<HWND> {
     let title_wide: Vec<u16> = TARGET_TITLE.encode_utf16().chain(std::iter::once(0)).collect();
     
     unsafe {
-        let hwnd = FindWindowW(PCWSTR::null(), PCWSTR(title_wide.as_ptr()));
-        if hwnd.0 == 0 {
+        let hwnd = FindWindowW(PCWSTR::null(), PCWSTR(title_wide.as_ptr())).ok()?;
+        if hwnd.0 as usize == 0 {
             None
         } else {
             Some(hwnd)
@@ -81,8 +81,8 @@ pub fn get_window_rect(title: &str) -> Option<(i32, i32, i32, i32)> {
     let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
     
     unsafe {
-        let hwnd = FindWindowW(PCWSTR::null(), PCWSTR(title_wide.as_ptr()));
-        if hwnd.0 == 0 {
+        let hwnd = FindWindowW(PCWSTR::null(), PCWSTR(title_wide.as_ptr())).ok()?;
+        if hwnd.0 as usize == 0 {
             tracing::warn!("Window '{}' not found.", title);
             return None;
         }
@@ -117,7 +117,7 @@ mod tests {
         
         unsafe {
             let hwnd = FindWindowW(PCWSTR::null(), PCWSTR(title_wide.as_ptr()));
-            assert_eq!(hwnd.0, 0);
+            assert!(hwnd.is_err() || hwnd.unwrap().0 as usize == 0);
         }
     }
 }
