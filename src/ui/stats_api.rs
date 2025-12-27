@@ -251,7 +251,13 @@ impl FishStats {
         
         let total_fish = total_caught + total_failed;
         let overall_rate = if total_fish > 0 { (total_caught as f64 / total_fish as f64) * 100.0 } else { 0.0 };
-        let avg_fpm = if total_fish > 0 { total_caught as f64 / 60.0 } else { 0.0 };
+        
+        // Calculate average fish per minute based on total hours of data
+        // Each hour entry represents data from that hour block
+        let total_hours = self.fish_summary.values()
+            .map(|hours| hours.len())
+            .sum::<usize>() as f64;
+        let avg_fpm = if total_hours > 0.0 { total_caught as f64 / (total_hours * 60.0) } else { 0.0 };
         
         format!(r#"
         <h3 style='margin-bottom: 6px;'>Overall Stats</h3>

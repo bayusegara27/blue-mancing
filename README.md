@@ -8,6 +8,18 @@
 
 A fishing automation script for Blue Protocol: Star Resonance.
 
+## About
+
+This application is now available in two versions:
+- **Python version** - Original implementation using Python with pynput, OpenCV, and pywebview
+- **Rust version** - New high-performance implementation using Rust with tokio async runtime
+
+The Rust version provides:
+- Faster async handling with tokio runtime
+- Better memory management and performance
+- Native Windows API integration
+- Same functionality as the Python version
+
 ## Download
 
 https://github.com/rdsp04/bpsr-fishing/releases/latest
@@ -28,6 +40,36 @@ only available on windows
 - Press **F9** to start the macro.
 - Press **F10** to stop the macro.
 - The script now keeps track of catches, fish types, XP, and sessions.
+
+## Building from Source
+
+### Python Version
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Or using uv
+uv sync
+
+# Run
+python main.py
+```
+
+### Rust Version
+
+```bash
+# Build release version (Windows)
+cargo build --release
+
+# Run
+cargo run --release
+```
+
+**Requirements for Rust build:**
+- Rust toolchain (1.70+)
+- Windows SDK (for Windows API bindings)
+- Visual Studio Build Tools
 
 ## FAQ
 

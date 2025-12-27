@@ -159,7 +159,10 @@ impl ImageService {
             }
         }
         
-        // Normalize fish name
+        // Normalize fish name to match the format used in fish_config.json
+        // - Spaces are replaced with underscores (e.g., "Glass Bottle" -> "glass_bottle")
+        // - Hash symbols are removed (e.g., "Legacy Part #1" -> "legacy_part_1")
+        // - Converted to lowercase for consistent matching
         if let Some(ref name) = best_fish {
             let normalized = name.replace(" ", "_").replace("#", "").to_lowercase();
             return (Some(normalized), best_score);

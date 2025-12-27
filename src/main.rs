@@ -465,8 +465,10 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
                 continue;
             }
             
-            // Start fishing - left click
-            click(rect.0 + (rect.2 - rect.0) / 2, rect.1 + (rect.2 - rect.0) / 2);
+            // Start fishing - left click at center of window
+            let center_x = rect.0 + (rect.2 - rect.0) / 2;
+            let center_y = rect.1 + (rect.3 - rect.1) / 2;
+            click(center_x, center_y);
             println!("Started fishing -> waiting for catch_fish.png");
             state.update_progress();
             
