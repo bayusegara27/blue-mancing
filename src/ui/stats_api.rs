@@ -352,6 +352,40 @@ impl StatsApi {
         self.settings.get("resolution").cloned().unwrap_or_else(|| "1920x1080".to_string())
     }
     
+    // Overlay settings
+    pub fn set_show_debug_overlay(&mut self, value: bool) {
+        self.settings.insert("show_debug_overlay".to_string(), value.to_string());
+        self.save_settings();
+    }
+    
+    pub fn get_show_debug_overlay(&self) -> bool {
+        self.settings.get("show_debug_overlay")
+            .map(|s| s == "true")
+            .unwrap_or(true)
+    }
+    
+    pub fn set_overlay_always_on_top(&mut self, value: bool) {
+        self.settings.insert("overlay_always_on_top".to_string(), value.to_string());
+        self.save_settings();
+    }
+    
+    pub fn get_overlay_always_on_top(&self) -> bool {
+        self.settings.get("overlay_always_on_top")
+            .map(|s| s == "true")
+            .unwrap_or(true)
+    }
+    
+    pub fn set_show_overlay(&mut self, value: bool) {
+        self.settings.insert("show_overlay".to_string(), value.to_string());
+        self.save_settings();
+    }
+    
+    pub fn get_show_overlay(&self) -> bool {
+        self.settings.get("show_overlay")
+            .map(|s| s == "true")
+            .unwrap_or(true)
+    }
+    
     pub fn get_daily_table(&mut self) -> String {
         self.stats.get_all_daily_tables()
     }

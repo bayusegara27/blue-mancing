@@ -170,9 +170,41 @@ fn handle_dashboard_ipc(message: &str) -> String {
             let current = get_key(key_name).unwrap_or_else(|| "F9".to_string());
             serde_json::to_string(&current).unwrap_or_else(|_| r#""F9""#.to_string())
         }
-        "set_auto_bait" | "set_auto_rod" | "set_debug_overlay" | "set_overlay_on_top" => {
-            // TODO: These settings need full implementation with config persistence
-            // For now, just acknowledge the request
+        "set_debug_overlay" => {
+            let value = parsed.get("value").and_then(|v| v.as_bool()).unwrap_or(true);
+            let mut stats = StatsApi::new();
+            stats.set_show_debug_overlay(value);
+            r#"{"success": true}"#.to_string()
+        }
+        "get_debug_overlay" => {
+            let stats = StatsApi::new();
+            let value = stats.get_show_debug_overlay();
+            serde_json::to_string(&value).unwrap_or_else(|_| "true".to_string())
+        }
+        "set_overlay_on_top" => {
+            let value = parsed.get("value").and_then(|v| v.as_bool()).unwrap_or(true);
+            let mut stats = StatsApi::new();
+            stats.set_overlay_always_on_top(value);
+            r#"{"success": true}"#.to_string()
+        }
+        "get_overlay_on_top" => {
+            let stats = StatsApi::new();
+            let value = stats.get_overlay_always_on_top();
+            serde_json::to_string(&value).unwrap_or_else(|_| "true".to_string())
+        }
+        "set_show_overlay" => {
+            let value = parsed.get("value").and_then(|v| v.as_bool()).unwrap_or(true);
+            let mut stats = StatsApi::new();
+            stats.set_show_overlay(value);
+            r#"{"success": true}"#.to_string()
+        }
+        "get_show_overlay" => {
+            let stats = StatsApi::new();
+            let value = stats.get_show_overlay();
+            serde_json::to_string(&value).unwrap_or_else(|_| "true".to_string())
+        }
+        "set_auto_bait" | "set_auto_rod" => {
+            // TODO: These settings need full implementation
             r#"{"success": true}"#.to_string()
         }
         _ => {
@@ -224,10 +256,28 @@ fn inject_api_bridge(html: &str) -> String {
                 return callApi('set_auto_rod', { value: value });
             },
             set_debug_overlay: function(value) {
+                // Update preloaded value
+                window.__bluemancing_settings.show_debug_overlay = value;
                 return callApi('set_debug_overlay', { value: value });
             },
+            get_debug_overlay: function() {
+                return callApi('get_debug_overlay', {});
+            },
             set_overlay_on_top: function(value) {
+                // Update preloaded value
+                window.__bluemancing_settings.overlay_always_on_top = value;
                 return callApi('set_overlay_on_top', { value: value });
+            },
+            get_overlay_on_top: function() {
+                return callApi('get_overlay_on_top', {});
+            },
+            set_show_overlay: function(value) {
+                // Update preloaded value
+                window.__bluemancing_settings.show_overlay = value;
+                return callApi('set_show_overlay', { value: value });
+            },
+            get_show_overlay: function() {
+                return callApi('get_show_overlay', {});
             }
         }
     };
@@ -282,6 +332,12 @@ fn inject_api_bridge(html: &str) -> String {
                 return window.__bluemancing_resolution || '1920x1080';
             case 'get_key':
                 return window.__bluemancing_keys && window.__bluemancing_keys[params.name] || '';
+            case 'get_debug_overlay':
+                return window.__bluemancing_settings && window.__bluemancing_settings.show_debug_overlay;
+            case 'get_overlay_on_top':
+                return window.__bluemancing_settings && window.__bluemancing_settings.overlay_always_on_top;
+            case 'get_show_overlay':
+                return window.__bluemancing_settings && window.__bluemancing_settings.show_overlay;
             default:
                 return null;
         }
@@ -301,6 +357,7 @@ fn inject_api_bridge(html: &str) -> String {
     let summary_data = get_summary_html();
     let resolution = get_resolution_value();
     let keys_data = get_keys_json();
+    let settings_data = get_overlay_settings_json();
     
     let preload_script = format!(r#"
 <script>
@@ -310,13 +367,15 @@ window.__bluemancing_daily = {};
 window.__bluemancing_summary = {};
 window.__bluemancing_resolution = {};
 window.__bluemancing_keys = {};
+window.__bluemancing_settings = {};
 </script>
 "#, 
         serde_json::to_string(&guide_data).unwrap_or_else(|_| "\"\"".to_string()),
         serde_json::to_string(&daily_data).unwrap_or_else(|_| "\"\"".to_string()),
         serde_json::to_string(&summary_data).unwrap_or_else(|_| "\"\"".to_string()),
         serde_json::to_string(&resolution).unwrap_or_else(|_| "\"1920x1080\"".to_string()),
-        keys_data
+        keys_data,
+        settings_data
     );
     
     // Inject before </head> tag
@@ -399,6 +458,21 @@ fn get_keys_json() -> String {
     }
     
     serde_json::to_string(&keys).unwrap_or_else(|_| "{}".to_string())
+}
+
+/// Get overlay settings as JSON
+#[cfg(all(feature = "gui", windows))]
+fn get_overlay_settings_json() -> String {
+    use crate::ui::stats_api::StatsApi;
+    
+    let stats = StatsApi::new();
+    let mut settings = std::collections::HashMap::new();
+    
+    settings.insert("show_debug_overlay".to_string(), stats.get_show_debug_overlay());
+    settings.insert("overlay_always_on_top".to_string(), stats.get_overlay_always_on_top());
+    settings.insert("show_overlay".to_string(), stats.get_show_overlay());
+    
+    serde_json::to_string(&settings).unwrap_or_else(|_| r#"{"show_debug_overlay":true,"overlay_always_on_top":true,"show_overlay":true}"#.to_string())
 }
 
 /// Custom event types for the event loop
