@@ -26,13 +26,18 @@ static KEYBOARD: Lazy<Mutex<Enigo>> = Lazy::new(|| {
 /// Click at a position
 #[cfg(windows)]
 pub fn click(x: i32, y: i32) {
+    tracing::debug!("[INPUT] click() - moving mouse to ({}, {}) and clicking", x, y);
     thread::sleep(Duration::from_millis(50));
     let mut mouse = MOUSE.lock();
     if let Err(e) = mouse.move_mouse(x, y, Coordinate::Abs) {
-        tracing::warn!("Failed to move mouse to ({}, {}): {:?}", x, y, e);
+        tracing::warn!("[INPUT] Failed to move mouse to ({}, {}): {:?}", x, y, e);
+    } else {
+        tracing::trace!("[INPUT] Mouse moved to ({}, {})", x, y);
     }
     if let Err(e) = mouse.button(Button::Left, Direction::Click) {
-        tracing::warn!("Failed to click mouse: {:?}", e);
+        tracing::warn!("[INPUT] Failed to click mouse: {:?}", e);
+    } else {
+        tracing::trace!("[INPUT] Mouse left click performed");
     }
 }
 
@@ -44,13 +49,18 @@ pub fn click(_x: i32, _y: i32) {
 /// Press and release a key
 #[cfg(windows)]
 pub fn press_key(key: &str) {
+    tracing::debug!("[INPUT] press_key('{}') - pressing and releasing key", key);
     thread::sleep(Duration::from_millis(50));
     let mut keyboard = KEYBOARD.lock();
     
     if let Some(enigo_key) = string_to_enigo_key(key) {
         if let Err(e) = keyboard.key(enigo_key, Direction::Click) {
-            tracing::warn!("Failed to press key '{}': {:?}", key, e);
+            tracing::warn!("[INPUT] Failed to press key '{}': {:?}", key, e);
+        } else {
+            tracing::trace!("[INPUT] Key '{}' pressed and released", key);
         }
+    } else {
+        tracing::warn!("[INPUT] Unknown key '{}' - cannot convert to enigo key", key);
     }
 }
 
@@ -62,12 +72,15 @@ pub fn press_key(_key: &str) {
 /// Hold a key down
 #[cfg(windows)]
 pub fn hold_key(key: &str) {
+    tracing::trace!("[INPUT] hold_key('{}') - holding key down", key);
     let mut keyboard = KEYBOARD.lock();
     
     if let Some(enigo_key) = string_to_enigo_key(key) {
         if let Err(e) = keyboard.key(enigo_key, Direction::Press) {
-            tracing::warn!("Failed to hold key '{}': {:?}", key, e);
+            tracing::warn!("[INPUT] Failed to hold key '{}': {:?}", key, e);
         }
+    } else {
+        tracing::warn!("[INPUT] Unknown key '{}' - cannot hold", key);
     }
 }
 
@@ -79,12 +92,15 @@ pub fn hold_key(_key: &str) {
 /// Release a held key
 #[cfg(windows)]
 pub fn release_key(key: &str) {
+    tracing::trace!("[INPUT] release_key('{}') - releasing held key", key);
     let mut keyboard = KEYBOARD.lock();
     
     if let Some(enigo_key) = string_to_enigo_key(key) {
         if let Err(e) = keyboard.key(enigo_key, Direction::Release) {
-            tracing::warn!("Failed to release key '{}': {:?}", key, e);
+            tracing::warn!("[INPUT] Failed to release key '{}': {:?}", key, e);
         }
+    } else {
+        tracing::warn!("[INPUT] Unknown key '{}' - cannot release", key);
     }
 }
 
@@ -96,9 +112,12 @@ pub fn release_key(_key: &str) {
 /// Press left mouse button down
 #[cfg(windows)]
 pub fn mouse_press() {
+    tracing::debug!("[INPUT] mouse_press() - pressing left mouse button");
     let mut mouse = MOUSE.lock();
     if let Err(e) = mouse.button(Button::Left, Direction::Press) {
-        tracing::warn!("Failed to press mouse button: {:?}", e);
+        tracing::warn!("[INPUT] Failed to press mouse button: {:?}", e);
+    } else {
+        tracing::trace!("[INPUT] Mouse button pressed");
     }
 }
 
@@ -110,9 +129,12 @@ pub fn mouse_press() {
 /// Release left mouse button
 #[cfg(windows)]
 pub fn mouse_release() {
+    tracing::debug!("[INPUT] mouse_release() - releasing left mouse button");
     let mut mouse = MOUSE.lock();
     if let Err(e) = mouse.button(Button::Left, Direction::Release) {
-        tracing::warn!("Failed to release mouse button: {:?}", e);
+        tracing::warn!("[INPUT] Failed to release mouse button: {:?}", e);
+    } else {
+        tracing::trace!("[INPUT] Mouse button released");
     }
 }
 
@@ -124,9 +146,12 @@ pub fn mouse_release() {
 /// Move mouse to position
 #[cfg(windows)]
 pub fn mouse_move(x: i32, y: i32) {
+    tracing::debug!("[INPUT] mouse_move({}, {}) - moving mouse to position", x, y);
     let mut mouse = MOUSE.lock();
     if let Err(e) = mouse.move_mouse(x, y, Coordinate::Abs) {
-        tracing::warn!("Failed to move mouse to ({}, {}): {:?}", x, y, e);
+        tracing::warn!("[INPUT] Failed to move mouse to ({}, {}): {:?}", x, y, e);
+    } else {
+        tracing::trace!("[INPUT] Mouse moved to ({}, {})", x, y);
     }
 }
 
