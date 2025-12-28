@@ -92,7 +92,7 @@ fn handle_ipc_message(message: &str) -> Option<String> {
 /// Handle IPC message from dashboard JavaScript - supports full API
 #[cfg(all(feature = "gui", windows))]
 fn handle_dashboard_ipc(message: &str) -> String {
-    use crate::utils::keybinds::{get_key, set_key};
+    use crate::utils::keybinds::get_key;
     use crate::ui::stats_api::StatsApi;
     use pulldown_cmark::{Parser, Options, html};
     
@@ -171,7 +171,8 @@ fn handle_dashboard_ipc(message: &str) -> String {
             serde_json::to_string(&current).unwrap_or_else(|_| r#""F9""#.to_string())
         }
         "set_auto_bait" | "set_auto_rod" | "set_debug_overlay" | "set_overlay_on_top" => {
-            // These settings are stored but not fully implemented yet
+            // TODO: These settings need full implementation with config persistence
+            // For now, just acknowledge the request
             r#"{"success": true}"#.to_string()
         }
         _ => {
@@ -242,8 +243,9 @@ fn inject_api_bridge(html: &str) -> String {
                     window.ipc.postMessage(message);
                 }
                 
-                // Since wry IPC is async, we need to handle the response differently
-                // For now, make a synchronous call using a blocking approach
+                // Note: wry IPC is one-way (JS -> Rust), so we use preloaded data
+                // for immediate display. The IPC call triggers a refresh on the Rust side.
+                // Data is preloaded at startup and returned synchronously from cache.
                 const result = callApiSync(action, params);
                 resolve(result);
             } catch (e) {
@@ -253,7 +255,7 @@ fn inject_api_bridge(html: &str) -> String {
         });
     }
     
-    // Synchronous API call using inline data
+    // Get data from preloaded cache (loaded at startup by Rust)
     function callApiSync(action, params) {
         const message = JSON.stringify({ action: action, ...params });
         
@@ -448,9 +450,10 @@ pub fn start_ui() {
         .with_html(&main_html_with_api)
         .with_ipc_handler(move |request| {
             let message = request.body();
+            // IPC handler processes requests but responses are preloaded in HTML
+            // The response is logged for debugging purposes
             let response = handle_dashboard_ipc(message);
-            tracing::debug!("Dashboard IPC response: {}", response);
-            // Note: Response is handled via the callback mechanism in JS
+            tracing::debug!("Dashboard IPC: {} -> {}", message, response);
         })
         .build(&main_window)
         .expect("Failed to create main webview");
