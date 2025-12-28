@@ -1663,6 +1663,47 @@
             }
         });
 
+        // === AUTO-REFRESH FUNCTIONALITY ===
+        let autoRefreshInterval = null;
+        const AUTO_REFRESH_INTERVAL_MS = 5000; // Refresh every 5 seconds
+
+        // Refresh functions for each tab
+        async function refreshCurrentPage() {
+            const activePage = document.querySelector('.nav-btn.active');
+            if (!activePage) return;
+
+            const tabId = activePage.id;
+            try {
+                if (tabId === 'tab-daily') {
+                    await loadDaily();
+                } else if (tabId === 'tab-summary') {
+                    await loadSummary();
+                } else if (tabId === 'tab-settings') {
+                    // Refresh settings values
+                    await initKeyButtons();
+                    const res = await window.pywebview.api.get_resolution();
+                    document.getElementById("resolution").value = res;
+                    document.getElementById("res-pill").textContent = res;
+                }
+            } catch (e) {
+                console.warn("Auto-refresh failed:", e);
+            }
+        }
+
+        // Start auto-refresh when on Daily, Summary, or Settings pages
+        function startAutoRefresh() {
+            if (autoRefreshInterval) return;
+            autoRefreshInterval = setInterval(refreshCurrentPage, AUTO_REFRESH_INTERVAL_MS);
+        }
+
+        // Stop auto-refresh
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
         // === INITIALIZE ===
         window.addEventListener("pywebviewready", async () => {
             await loadGuide();
@@ -1673,6 +1714,9 @@
             const res = await window.pywebview.api.get_resolution();
             document.getElementById("resolution").value = res;
             document.getElementById("res-pill").textContent = res;
+
+            // Start auto-refresh for real-time updates
+            startAutoRefresh();
         });
 
         // === DEFAULT PAGE ===

@@ -139,10 +139,10 @@ pub fn start_ui() {
         title: "Blue Mancing - Dashboard".to_string(),
     });
     
-    // Create overlay window - compact size
+    // Create overlay window - compact size to fit HTML content (240px width + padding)
     let overlay_window = WindowBuilder::new()
         .with_title("Blue Mancing")
-        .with_inner_size(tao::dpi::LogicalSize::new(260, 280))
+        .with_inner_size(tao::dpi::LogicalSize::new(244, 260))
         .with_resizable(false)
         .with_decorations(false)
         .with_always_on_top(true)
