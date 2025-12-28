@@ -347,6 +347,9 @@ fn post_catch_loop(
                 SHARED_STATE.set_detail_message("Clicking continue button...");
                 
                 for retry in 0..3 {
+                    // Focus window before clicking to ensure click goes to the right place
+                    focus_blue_protocol_window();
+                    
                     if let Some(continue_pos) = *state.saved_continue_pos.lock() {
                         click(continue_pos.0, continue_pos.1);
                         SHARED_STATE.set_detail_message(format!("Click attempt {}/3", retry + 1));
@@ -362,6 +365,14 @@ fn post_catch_loop(
                     }
                 }
                 
+                // Release any held movement keys before returning
+                if let Some(key) = get_pykey("left_key") {
+                    release_key(&key);
+                }
+                if let Some(key) = get_pykey("right_key") {
+                    release_key(&key);
+                }
+                
                 SHARED_STATE.set_activity(BotActivity::WaitingForDefaultScreen);
                 SHARED_STATE.set_detail_message("Ready for next catch");
                 return;
@@ -370,6 +381,14 @@ fn post_catch_loop(
                 SHARED_STATE.set_activity(BotActivity::MinigameFailed);
                 SHARED_STATE.set_detail_message("Minigame failed, fish escaped!");
                 mouse_release();
+                
+                // Release any held movement keys before returning
+                if let Some(key) = get_pykey("left_key") {
+                    release_key(&key);
+                }
+                if let Some(key) = get_pykey("right_key") {
+                    release_key(&key);
+                }
                 
                 // Update stats
                 {
@@ -406,6 +425,15 @@ fn handle_no_progress_loop(
     println!("No progress detected, performing recovery...");
     SHARED_STATE.set_activity(BotActivity::RecoveringFromTimeout);
     SHARED_STATE.set_detail_message("No progress for 45s, recovering...");
+    
+    // Release mouse button and any held movement keys before recovery
+    mouse_release();
+    if let Some(key) = get_pykey("left_key") {
+        release_key(&key);
+    }
+    if let Some(key) = get_pykey("right_key") {
+        release_key(&key);
+    }
     
     let esc_key = get_pykey("esc_key");
     let fish_key = get_pykey("fish_key");
