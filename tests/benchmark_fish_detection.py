@@ -59,7 +59,10 @@ def load_fish_templates(fish_folder: Path) -> Dict[str, Tuple[np.ndarray, Option
             continue
         
         # Extract grayscale template and optional mask
-        if template_img.shape[2] == 4:
+        if len(template_img.shape) < 3:
+            # Already grayscale
+            templates[fish_name] = (template_img, None)
+        elif template_img.shape[2] == 4:
             # RGBA image - extract grayscale and mask
             bgr = template_img[:, :, :3]
             alpha = template_img[:, :, 3]
@@ -142,12 +145,23 @@ def extract_expected_fish_name(filename: str) -> Optional[str]:
     return filename.replace("_test_1920x1080.png", "")
 
 
+def find_project_root() -> Path:
+    """Find the project root directory by looking for Cargo.toml"""
+    current = Path(__file__).resolve().parent
+    while current != current.parent:
+        if (current / "Cargo.toml").exists():
+            return current
+        current = current.parent
+    # Fallback to parent of tests directory
+    return Path(__file__).resolve().parent.parent
+
+
 def run_benchmark():
     """Run the fish detection benchmark"""
     print("\n========== FISH DETECTION BENCHMARK (Python) ==========\n")
     
-    # Define paths
-    base_dir = Path(__file__).parent.parent
+    # Define paths relative to project root
+    base_dir = find_project_root()
     test_images_dir = base_dir / "tests" / "assets" / "1920x1080"
     fish_templates_dir = base_dir / "images" / "1920x1080" / "fish"
     
