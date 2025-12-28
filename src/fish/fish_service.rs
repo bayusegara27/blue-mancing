@@ -50,7 +50,9 @@ impl FishService {
     pub fn get_xp_by_type(&self, fish_type: &str) -> i32 {
         let fish_type_lower = fish_type.to_lowercase();
         for fish in &self.fishes {
-            if fish.name.to_lowercase() == fish_type_lower || fish.id == fish_type {
+            if fish.name.to_lowercase() == fish_type_lower
+                || fish.id.to_lowercase() == fish_type_lower
+            {
                 return fish.xp;
             }
         }

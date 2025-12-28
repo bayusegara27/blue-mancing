@@ -937,33 +937,44 @@ fn main() {
 
     // Create a file appender for debug logs
     let log_file_path = log_dir.join("debug.log");
-    let file = std::fs::OpenOptions::new()
+    let file_result = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&log_file_path)
-        .ok();
+        .open(&log_file_path);
 
     // Configure logging with both stdout and file output
     use tracing_subscriber::fmt::format::FmtSpan;
     use tracing_subscriber::prelude::*;
 
-    if let Some(file) = file {
-        let file_layer = tracing_subscriber::fmt::layer()
-            .with_writer(std::sync::Mutex::new(file))
-            .with_ansi(false)
-            .with_span_events(FmtSpan::CLOSE);
+    match file_result {
+        Ok(file) => {
+            let file_layer = tracing_subscriber::fmt::layer()
+                .with_writer(std::sync::Mutex::new(file))
+                .with_ansi(false)
+                .with_span_events(FmtSpan::CLOSE);
 
-        let stdout_layer = tracing_subscriber::fmt::layer().with_span_events(FmtSpan::CLOSE);
+            let stdout_layer = tracing_subscriber::fmt::layer().with_span_events(FmtSpan::CLOSE);
 
-        tracing_subscriber::registry()
-            .with(file_layer)
-            .with(stdout_layer)
-            .init();
+            tracing_subscriber::registry()
+                .with(file_layer)
+                .with(stdout_layer)
+                .init();
 
-        tracing::info!("[INIT] Debug logging enabled at: {:?}", log_file_path);
-    } else {
-        tracing_subscriber::fmt::init();
-        tracing::warn!("[INIT] Failed to create debug log file, using stdout only");
+            tracing::info!("[INIT] Debug logging enabled at: {:?}", log_file_path);
+        }
+        Err(e) => {
+            tracing_subscriber::fmt::init();
+            // Log the specific error for debugging
+            eprintln!(
+                "[INIT] Failed to create debug log file at {:?}: {}",
+                log_file_path, e
+            );
+            tracing::warn!(
+                "[INIT] Failed to create debug log file at {:?}: {}, using stdout only",
+                log_file_path,
+                e
+            );
+        }
     }
 
     tracing::info!("========================================");
