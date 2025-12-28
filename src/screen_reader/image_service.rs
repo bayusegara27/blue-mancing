@@ -25,13 +25,17 @@ use crate::utils::path::get_data_dir;
 // Values are ratios of the screen dimensions (0.0 - 1.0)
 // The crop region starts at (FISH_CROP_X_START, FISH_CROP_Y_START) and has
 // dimensions (FISH_CROP_WIDTH x FISH_CROP_HEIGHT) as ratios of screen size.
+//
+// Based on benchmark analysis of test images, fish templates appear at:
+// - X: 23% to 46% of screen width (lower-left area)
+// - Y: 68% to 99% of screen height (bottom portion)
 
 /// Starting X position for fish detection crop (ratio of screen width)
-const FISH_CROP_X_START: f32 = 0.40;
+const FISH_CROP_X_START: f32 = 0.20;
 /// Starting Y position for fish detection crop (ratio of screen height)
-const FISH_CROP_Y_START: f32 = 0.45;
+const FISH_CROP_Y_START: f32 = 0.65;
 /// Width of fish detection crop region (ratio of screen width)
-const FISH_CROP_WIDTH: f32 = 0.50;
+const FISH_CROP_WIDTH: f32 = 0.30;
 /// Height of fish detection crop region (ratio of screen height)
 const FISH_CROP_HEIGHT: f32 = 0.35;
 /// Minimum crop size in pixels (fallback to full image if smaller)
