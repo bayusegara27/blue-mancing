@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::time::Duration;
 use image::{GrayImage, ImageBuffer, Luma};
-use imageproc::template_matching::{match_template, MatchTemplateMethod};
 
 use super::screen_service::{ScreenService, Region};
 use super::base::get_resolution_folder;
@@ -65,11 +64,9 @@ impl ImageService {
             }
         };
         
-        // Perform template matching
-        let result = match_template(&img_gray, &template, MatchTemplateMethod::CrossCorrelationNormalized);
-        
-        // Find best match
-        let (max_val, max_loc) = find_max_location(&result);
+        // Perform template matching using correlation coefficient normalized
+        // This is equivalent to OpenCV's TM_CCOEFF_NORMED and gives values in [-1, 1]
+        let (max_val, max_loc) = match_template_ccoeff_normed(&img_gray, &template);
         
         if max_val >= threshold {
             let click_x = x1 + max_loc.0 as i32 + template.width() as i32 / 2;
@@ -148,8 +145,8 @@ impl ImageService {
                         continue;
                     }
                     
-                    let result = match_template(&crop, &template_gray, MatchTemplateMethod::CrossCorrelationNormalized);
-                    let (max_val, _) = find_max_location(&result);
+                    // Use correlation coefficient normalized for better matching
+                    let (max_val, _) = match_template_ccoeff_normed(&crop, &template_gray);
                     
                     if max_val > best_score {
                         best_score = max_val;
@@ -211,8 +208,8 @@ impl ImageService {
                     continue;
                 }
                 
-                let result = match_template(&img_crop, &template, MatchTemplateMethod::CrossCorrelationNormalized);
-                let (max_val, _) = find_max_location(&result);
+                // Use correlation coefficient normalized for better matching
+                let (max_val, _) = match_template_ccoeff_normed(&img_crop, &template);
                 
                 if max_val > best_score {
                     best_score = max_val;
@@ -238,20 +235,83 @@ impl Default for ImageService {
     }
 }
 
-/// Find the maximum value and its location in a float grayscale image (template matching result)
-fn find_max_location(img: &ImageBuffer<Luma<f32>, Vec<f32>>) -> (f32, (u32, u32)) {
-    let mut max_val = f32::MIN;
+/// Template matching using correlation coefficient normalized (similar to OpenCV's TM_CCOEFF_NORMED).
+/// This method subtracts the mean from both image patch and template before computing correlation,
+/// making it robust to brightness variations and giving values in range [-1, 1].
+/// Returns (max_score, (x, y)) where (x, y) is the top-left corner of the best match.
+fn match_template_ccoeff_normed(image: &GrayImage, template: &GrayImage) -> (f32, (u32, u32)) {
+    let img_w = image.width();
+    let img_h = image.height();
+    let tmpl_w = template.width();
+    let tmpl_h = template.height();
+    
+    if tmpl_w > img_w || tmpl_h > img_h {
+        return (f32::MIN, (0, 0));
+    }
+    
+    // Pre-compute template mean and normalization factor
+    let tmpl_pixels: Vec<f32> = template.pixels().map(|p| p[0] as f32).collect();
+    let tmpl_mean: f32 = tmpl_pixels.iter().sum::<f32>() / tmpl_pixels.len() as f32;
+    let tmpl_centered: Vec<f32> = tmpl_pixels.iter().map(|&v| v - tmpl_mean).collect();
+    let tmpl_norm: f32 = tmpl_centered.iter().map(|&v| v * v).sum::<f32>().sqrt();
+    
+    // If template has no variance, return no match
+    if tmpl_norm < 1e-6 {
+        return (f32::MIN, (0, 0));
+    }
+    
+    let mut max_score = f32::MIN;
     let mut max_loc = (0u32, 0u32);
     
-    for (x, y, pixel) in img.enumerate_pixels() {
-        let val = pixel[0];
-        if val > max_val {
-            max_val = val;
-            max_loc = (x, y);
+    let result_w = img_w - tmpl_w + 1;
+    let result_h = img_h - tmpl_h + 1;
+    
+    for y in 0..result_h {
+        for x in 0..result_w {
+            // Extract image patch
+            let mut patch_sum: f32 = 0.0;
+            let mut patch_sq_sum: f32 = 0.0;
+            let patch_size = (tmpl_w * tmpl_h) as f32;
+            
+            for ty in 0..tmpl_h {
+                for tx in 0..tmpl_w {
+                    let pixel = image.get_pixel(x + tx, y + ty)[0] as f32;
+                    patch_sum += pixel;
+                    patch_sq_sum += pixel * pixel;
+                }
+            }
+            
+            let patch_mean = patch_sum / patch_size;
+            // Compute patch norm directly: sqrt(sum((x - mean)^2)) = sqrt(sum(x^2) - n*mean^2)
+            let patch_norm = (patch_sq_sum - patch_mean * patch_mean * patch_size).max(0.0).sqrt();
+            
+            // If patch has no variance, skip
+            if patch_norm < 1e-6 {
+                continue;
+            }
+            
+            // Compute correlation coefficient
+            let mut correlation: f32 = 0.0;
+            let mut idx = 0;
+            for ty in 0..tmpl_h {
+                for tx in 0..tmpl_w {
+                    let img_pixel = image.get_pixel(x + tx, y + ty)[0] as f32;
+                    let img_centered = img_pixel - patch_mean;
+                    correlation += img_centered * tmpl_centered[idx];
+                    idx += 1;
+                }
+            }
+            
+            let score = correlation / (patch_norm * tmpl_norm);
+            
+            if score > max_score {
+                max_score = score;
+                max_loc = (x, y);
+            }
         }
     }
     
-    (max_val, max_loc)
+    (max_score, max_loc)
 }
 
 #[cfg(test)]
@@ -269,5 +329,51 @@ mod tests {
         let service = ImageService::new();
         let path = service.get_image_path("test.png");
         assert!(path.to_string_lossy().contains("test.png"));
+    }
+    
+    #[test]
+    fn test_match_template_ccoeff_normed_exact_match() {
+        // Create a simple 10x10 image with a pattern
+        let mut img = GrayImage::new(10, 10);
+        for y in 0..10 {
+            for x in 0..10 {
+                // Use modulo to avoid overflow
+                img.put_pixel(x, y, Luma([((x + y) * 12 % 256) as u8]));
+            }
+        }
+        
+        // Create a 3x3 template from the center of the image
+        let template = image::imageops::crop_imm(&img, 3, 3, 3, 3).to_image();
+        
+        let (score, loc) = match_template_ccoeff_normed(&img, &template);
+        
+        // The score should be very close to 1.0 for exact match
+        assert!(score > 0.99, "Score {} should be > 0.99 for exact match", score);
+        // Location should be approximately where we cropped from
+        assert_eq!(loc, (3, 3), "Location {:?} should be (3, 3)", loc);
+    }
+    
+    #[test]
+    fn test_match_template_ccoeff_normed_no_match() {
+        // Create a gradient image
+        let mut img = GrayImage::new(20, 20);
+        for y in 0..20 {
+            for x in 0..20 {
+                img.put_pixel(x, y, Luma([(x * 10).min(255) as u8]));
+            }
+        }
+        
+        // Create a template with inverted pattern (should not match well)
+        let mut template = GrayImage::new(5, 5);
+        for y in 0..5 {
+            for x in 0..5 {
+                template.put_pixel(x, y, Luma([(255 - (x * 40)).min(255) as u8]));
+            }
+        }
+        
+        let (score, _) = match_template_ccoeff_normed(&img, &template);
+        
+        // Score should be low (possibly negative) for poor match
+        assert!(score < 0.5, "Score {} should be < 0.5 for poor match", score);
     }
 }
