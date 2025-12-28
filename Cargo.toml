@@ -4,6 +4,7 @@ version = "2.0.0"
 edition = "2021"
 description = "Auto fishing bot for Blue Protocol: Star Resonance"
 authors = ["bayusegara27"]
+build = "build.rs"
 
 [features]
 default = ["gui"]
@@ -68,6 +69,10 @@ windows = { version = "0.58", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_System_Threading"
 ]}
+
+# Build dependencies for Windows manifest
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
 
 [target.'cfg(unix)'.dependencies]
 # Linux input simulation (stub for compilation)

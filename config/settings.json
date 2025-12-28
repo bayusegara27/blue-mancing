@@ -9,5 +9,8 @@
   "right_key": "D",
   "resolution": "1920x1080",
   "auto_bait_purchase": "T1",
-  "auto_rods_purchase": "T1"
+  "auto_rods_purchase": "T1",
+  "show_debug_overlay": true,
+  "overlay_always_on_top": true,
+  "show_overlay": true
 }

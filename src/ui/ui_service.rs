@@ -89,6 +89,392 @@ fn handle_ipc_message(message: &str) -> Option<String> {
     }
 }
 
+/// Handle IPC message from dashboard JavaScript - supports full API
+#[cfg(all(feature = "gui", windows))]
+fn handle_dashboard_ipc(message: &str) -> String {
+    use crate::utils::keybinds::get_key;
+    use crate::ui::stats_api::StatsApi;
+    use pulldown_cmark::{Parser, Options, html};
+    
+    // Parse the message as JSON
+    let parsed: serde_json::Value = match serde_json::from_str(message) {
+        Ok(v) => v,
+        Err(_) => return r#"{"error": "Invalid JSON"}"#.to_string(),
+    };
+    
+    let action = match parsed.get("action").and_then(|a| a.as_str()) {
+        Some(a) => a,
+        None => return r#"{"error": "Missing action"}"#.to_string(),
+    };
+    
+    match action {
+        "get_guide" => {
+            // Load and convert GUIDE.md to HTML
+            let base = get_data_dir();
+            let guide_path = base.join("GUIDE.md");
+            
+            let markdown = match fs::read_to_string(&guide_path) {
+                Ok(content) => content,
+                Err(_) => {
+                    // Try current directory as fallback
+                    match fs::read_to_string("GUIDE.md") {
+                        Ok(content) => content,
+                        Err(_) => "# Guide\n\nGuide content not found.".to_string(),
+                    }
+                }
+            };
+            
+            // Convert markdown to HTML
+            let mut options = Options::empty();
+            options.insert(Options::ENABLE_STRIKETHROUGH);
+            let parser = Parser::new_ext(&markdown, options);
+            let mut html_output = String::new();
+            html::push_html(&mut html_output, parser);
+            
+            // Wrap in a div with styling
+            let result = format!(r#"<div class="intro-card">{}</div>"#, html_output);
+            serde_json::to_string(&result).unwrap_or_else(|_| r#""""#.to_string())
+        }
+        "get_daily_table" => {
+            let mut stats = StatsApi::new();
+            let html = stats.get_daily_table();
+            serde_json::to_string(&html).unwrap_or_else(|_| r#""""#.to_string())
+        }
+        "get_overall_summary" => {
+            let mut stats = StatsApi::new();
+            let html = stats.get_overall_summary();
+            serde_json::to_string(&html).unwrap_or_else(|_| r#""""#.to_string())
+        }
+        "get_resolution" => {
+            let stats = StatsApi::new();
+            let res = stats.get_resolution();
+            serde_json::to_string(&res).unwrap_or_else(|_| r#""1920x1080""#.to_string())
+        }
+        "set_resolution" => {
+            let res = parsed.get("value").and_then(|v| v.as_str()).unwrap_or("1920x1080");
+            let mut stats = StatsApi::new();
+            stats.set_resolution(res);
+            r#"{"success": true}"#.to_string()
+        }
+        "get_key" => {
+            let key_name = parsed.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            match get_key(key_name) {
+                Some(k) => serde_json::to_string(&k).unwrap_or_else(|_| r#""""#.to_string()),
+                None => r#""""#.to_string(),
+            }
+        }
+        "capture_key_for" => {
+            // For now, return a placeholder - actual key capture requires native keyboard hooks
+            // This would need to be implemented with a proper key capture mechanism
+            let key_name = parsed.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let current = get_key(key_name).unwrap_or_else(|| "F9".to_string());
+            serde_json::to_string(&current).unwrap_or_else(|_| r#""F9""#.to_string())
+        }
+        "set_debug_overlay" => {
+            let value = parsed.get("value").and_then(|v| v.as_bool()).unwrap_or(true);
+            let mut stats = StatsApi::new();
+            stats.set_show_debug_overlay(value);
+            r#"{"success": true}"#.to_string()
+        }
+        "get_debug_overlay" => {
+            let stats = StatsApi::new();
+            let value = stats.get_show_debug_overlay();
+            serde_json::to_string(&value).unwrap_or_else(|_| "true".to_string())
+        }
+        "set_overlay_on_top" => {
+            let value = parsed.get("value").and_then(|v| v.as_bool()).unwrap_or(true);
+            let mut stats = StatsApi::new();
+            stats.set_overlay_always_on_top(value);
+            r#"{"success": true}"#.to_string()
+        }
+        "get_overlay_on_top" => {
+            let stats = StatsApi::new();
+            let value = stats.get_overlay_always_on_top();
+            serde_json::to_string(&value).unwrap_or_else(|_| "true".to_string())
+        }
+        "set_show_overlay" => {
+            let value = parsed.get("value").and_then(|v| v.as_bool()).unwrap_or(true);
+            let mut stats = StatsApi::new();
+            stats.set_show_overlay(value);
+            r#"{"success": true}"#.to_string()
+        }
+        "get_show_overlay" => {
+            let stats = StatsApi::new();
+            let value = stats.get_show_overlay();
+            serde_json::to_string(&value).unwrap_or_else(|_| "true".to_string())
+        }
+        "set_auto_bait" | "set_auto_rod" => {
+            // TODO: These settings need full implementation
+            r#"{"success": true}"#.to_string()
+        }
+        _ => {
+            format!(r#"{{"error": "Unknown action: {}"}}"#, action)
+        }
+    }
+}
+
+/// Inject the pywebview API bridge into HTML
+#[cfg(all(feature = "gui", windows))]
+fn inject_api_bridge(html: &str) -> String {
+    // JavaScript bridge that provides pywebview.api compatible interface
+    let api_bridge = r#"
+<script>
+// API Bridge for Blue Mancing Dashboard
+(function() {
+    // Promise-based API that uses IPC
+    const pendingRequests = new Map();
+    let requestId = 0;
+    
+    // Create the pywebview.api object
+    window.pywebview = {
+        api: {
+            get_guide: function() {
+                return callApi('get_guide', {});
+            },
+            get_daily_table: function() {
+                return callApi('get_daily_table', {});
+            },
+            get_overall_summary: function() {
+                return callApi('get_overall_summary', {});
+            },
+            get_resolution: function() {
+                return callApi('get_resolution', {});
+            },
+            set_resolution: function(value) {
+                return callApi('set_resolution', { value: value });
+            },
+            get_key: function(name) {
+                return callApi('get_key', { name: name });
+            },
+            capture_key_for: function(name) {
+                return callApi('capture_key_for', { name: name });
+            },
+            set_auto_bait: function(value) {
+                return callApi('set_auto_bait', { value: value });
+            },
+            set_auto_rod: function(value) {
+                return callApi('set_auto_rod', { value: value });
+            },
+            set_debug_overlay: function(value) {
+                // Update preloaded value
+                window.__bluemancing_settings.show_debug_overlay = value;
+                return callApi('set_debug_overlay', { value: value });
+            },
+            get_debug_overlay: function() {
+                return callApi('get_debug_overlay', {});
+            },
+            set_overlay_on_top: function(value) {
+                // Update preloaded value
+                window.__bluemancing_settings.overlay_always_on_top = value;
+                return callApi('set_overlay_on_top', { value: value });
+            },
+            get_overlay_on_top: function() {
+                return callApi('get_overlay_on_top', {});
+            },
+            set_show_overlay: function(value) {
+                // Update preloaded value
+                window.__bluemancing_settings.show_overlay = value;
+                return callApi('set_show_overlay', { value: value });
+            },
+            get_show_overlay: function() {
+                return callApi('get_show_overlay', {});
+            }
+        }
+    };
+    
+    // Call API via IPC - uses synchronous XMLHttpRequest workaround for wry
+    function callApi(action, params) {
+        return new Promise((resolve, reject) => {
+            try {
+                const message = JSON.stringify({ action: action, ...params });
+                
+                // Use ipc.postMessage for wry
+                if (window.ipc) {
+                    window.ipc.postMessage(message);
+                }
+                
+                // Note: wry IPC is one-way (JS -> Rust), so we use preloaded data
+                // for immediate display. The IPC call triggers a refresh on the Rust side.
+                // Data is preloaded at startup and returned synchronously from cache.
+                const result = callApiSync(action, params);
+                resolve(result);
+            } catch (e) {
+                console.error('API call failed:', e);
+                reject(e);
+            }
+        });
+    }
+    
+    // Get data from preloaded cache (loaded at startup by Rust)
+    function callApiSync(action, params) {
+        const message = JSON.stringify({ action: action, ...params });
+        
+        // Send via IPC
+        if (window.ipc) {
+            window.ipc.postMessage(message);
+        }
+        
+        // Return cached/inline data for immediate response
+        // The actual data will be loaded on first call
+        return getInlineData(action, params);
+    }
+    
+    // Get inline data (preloaded by Rust)
+    function getInlineData(action, params) {
+        switch(action) {
+            case 'get_guide':
+                return window.__bluemancing_guide || '';
+            case 'get_daily_table':
+                return window.__bluemancing_daily || '<p>Loading daily data...</p>';
+            case 'get_overall_summary':
+                return window.__bluemancing_summary || '<p>Loading summary...</p>';
+            case 'get_resolution':
+                return window.__bluemancing_resolution || '1920x1080';
+            case 'get_key':
+                return window.__bluemancing_keys && window.__bluemancing_keys[params.name] || '';
+            case 'get_debug_overlay':
+                return window.__bluemancing_settings && window.__bluemancing_settings.show_debug_overlay;
+            case 'get_overlay_on_top':
+                return window.__bluemancing_settings && window.__bluemancing_settings.overlay_always_on_top;
+            case 'get_show_overlay':
+                return window.__bluemancing_settings && window.__bluemancing_settings.show_overlay;
+            default:
+                return null;
+        }
+    }
+    
+    // Signal that pywebview is ready
+    setTimeout(function() {
+        window.dispatchEvent(new Event('pywebviewready'));
+    }, 100);
+})();
+</script>
+"#;
+    
+    // Also inject preloaded data
+    let guide_data = get_guide_html();
+    let daily_data = get_daily_html();
+    let summary_data = get_summary_html();
+    let resolution = get_resolution_value();
+    let keys_data = get_keys_json();
+    let settings_data = get_overlay_settings_json();
+    
+    let preload_script = format!(r#"
+<script>
+// Preloaded data for immediate display
+window.__bluemancing_guide = {};
+window.__bluemancing_daily = {};
+window.__bluemancing_summary = {};
+window.__bluemancing_resolution = {};
+window.__bluemancing_keys = {};
+window.__bluemancing_settings = {};
+</script>
+"#, 
+        serde_json::to_string(&guide_data).unwrap_or_else(|_| "\"\"".to_string()),
+        serde_json::to_string(&daily_data).unwrap_or_else(|_| "\"\"".to_string()),
+        serde_json::to_string(&summary_data).unwrap_or_else(|_| "\"\"".to_string()),
+        serde_json::to_string(&resolution).unwrap_or_else(|_| "\"1920x1080\"".to_string()),
+        keys_data,
+        settings_data
+    );
+    
+    // Inject before </head> tag
+    if let Some(pos) = html.find("</head>") {
+        let mut result = html.to_string();
+        result.insert_str(pos, &preload_script);
+        result.insert_str(pos, api_bridge);
+        result
+    } else {
+        // If no </head> found, prepend
+        format!("{}{}{}", api_bridge, preload_script, html)
+    }
+}
+
+/// Get guide HTML content
+#[cfg(all(feature = "gui", windows))]
+fn get_guide_html() -> String {
+    use pulldown_cmark::{Parser, Options, html};
+    
+    let base = get_data_dir();
+    let guide_path = base.join("GUIDE.md");
+    
+    let markdown = match fs::read_to_string(&guide_path) {
+        Ok(content) => content,
+        Err(_) => {
+            // Try current directory as fallback
+            match fs::read_to_string("GUIDE.md") {
+                Ok(content) => content,
+                Err(_) => "# Guide\n\nGuide content not found.".to_string(),
+            }
+        }
+    };
+    
+    // Convert markdown to HTML
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    let parser = Parser::new_ext(&markdown, options);
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    
+    format!(r#"<div class="intro-card">{}</div>"#, html_output)
+}
+
+/// Get daily stats HTML
+#[cfg(all(feature = "gui", windows))]
+fn get_daily_html() -> String {
+    use crate::ui::stats_api::StatsApi;
+    let mut stats = StatsApi::new();
+    stats.get_daily_table()
+}
+
+/// Get summary HTML
+#[cfg(all(feature = "gui", windows))]
+fn get_summary_html() -> String {
+    use crate::ui::stats_api::StatsApi;
+    let mut stats = StatsApi::new();
+    stats.get_overall_summary()
+}
+
+/// Get resolution value
+#[cfg(all(feature = "gui", windows))]
+fn get_resolution_value() -> String {
+    use crate::ui::stats_api::StatsApi;
+    let stats = StatsApi::new();
+    stats.get_resolution()
+}
+
+/// Get all keys as JSON
+#[cfg(all(feature = "gui", windows))]
+fn get_keys_json() -> String {
+    use crate::utils::keybinds::get_key;
+    
+    let key_names = ["start_key", "stop_key", "fish_key", "bait_key", "rods_key", "esc_key", "left_key", "right_key"];
+    let mut keys = std::collections::HashMap::new();
+    
+    for name in &key_names {
+        if let Some(value) = get_key(name) {
+            keys.insert(name.to_string(), value);
+        }
+    }
+    
+    serde_json::to_string(&keys).unwrap_or_else(|_| "{}".to_string())
+}
+
+/// Get overlay settings as JSON
+#[cfg(all(feature = "gui", windows))]
+fn get_overlay_settings_json() -> String {
+    use crate::ui::stats_api::StatsApi;
+    
+    let stats = StatsApi::new();
+    let mut settings = std::collections::HashMap::new();
+    
+    settings.insert("show_debug_overlay".to_string(), stats.get_show_debug_overlay());
+    settings.insert("overlay_always_on_top".to_string(), stats.get_overlay_always_on_top());
+    settings.insert("show_overlay".to_string(), stats.get_show_overlay());
+    
+    serde_json::to_string(&settings).unwrap_or_else(|_| r#"{"show_debug_overlay":true,"overlay_always_on_top":true,"show_overlay":true}"#.to_string())
+}
+
 /// Custom event types for the event loop
 #[cfg(all(feature = "gui", windows))]
 #[derive(Debug, Clone)]
@@ -130,19 +516,33 @@ pub fn start_ui() {
         .build(&event_loop)
         .expect("Failed to create main window");
     
-    let _main_webview = WebViewBuilder::new()
-        .with_html(&main_html)
+    // Inject the pywebview API bridge into the main HTML
+    let main_html_with_api = inject_api_bridge(&main_html);
+    
+    // Build main webview with IPC handler for dashboard API calls
+    let main_webview = WebViewBuilder::new()
+        .with_html(&main_html_with_api)
+        .with_ipc_handler(move |request| {
+            let message = request.body();
+            // IPC handler processes requests but responses are preloaded in HTML
+            // The response is logged for debugging purposes
+            let response = handle_dashboard_ipc(message);
+            tracing::debug!("Dashboard IPC: {} -> {}", message, response);
+        })
         .build(&main_window)
         .expect("Failed to create main webview");
+    
+    // Store main webview for evaluating scripts
+    let main_webview = Arc::new(parking_lot::Mutex::new(main_webview));
     
     register_window(Window::Main, WindowHandle {
         title: "Blue Mancing - Dashboard".to_string(),
     });
     
-    // Create overlay window - compact size
+    // Create overlay window - compact size to fit HTML content (240px width + padding)
     let overlay_window = WindowBuilder::new()
         .with_title("Blue Mancing")
-        .with_inner_size(tao::dpi::LogicalSize::new(260, 280))
+        .with_inner_size(tao::dpi::LogicalSize::new(244, 260))
         .with_resizable(false)
         .with_decorations(false)
         .with_always_on_top(true)

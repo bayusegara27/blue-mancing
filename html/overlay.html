@@ -91,23 +91,34 @@
     }
 
     .window-btn {
-      background: rgba(255, 255, 255, 0.05);
-      border: none;
-      color: rgba(255, 255, 255, 0.6);
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.7);
       cursor: pointer;
-      transition: all 0.2s ease;
-      padding: 3px 6px;
-      border-radius: 4px;
+      transition: all 0.18s ease;
+      padding: 4px 8px;
+      border-radius: 6px;
       font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .window-btn:hover {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(0, 255, 255, 0.06);
+      box-shadow: 0 0 8px rgba(0, 200, 255, 0.25);
       color: #fff;
     }
 
+    .window-btn.minimize:hover {
+      background: rgba(56, 198, 255, 0.15);
+      border-color: rgba(56, 198, 255, 0.3);
+      color: #38c6ff;
+    }
+
     .window-btn.close:hover {
-      background: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.25);
+      border-color: rgba(239, 68, 68, 0.4);
       color: #f87171;
     }
 
@@ -332,7 +343,7 @@
         <span class="title">Blue Mancing</span>
       </div>
       <div class="window-controls">
-        <button id="minimize-btn" class="window-btn" title="Minimize"><i class="fa-solid fa-minus"></i></button>
+        <button id="minimize-btn" class="window-btn minimize" title="Minimize"><i class="fa-solid fa-minus"></i></button>
         <button id="close-btn" class="window-btn close" title="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
     </div>

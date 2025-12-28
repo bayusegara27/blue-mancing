@@ -1356,6 +1356,12 @@
                     <h3><i class="fa-solid fa-window-restore"></i> Overlay Settings</h3>
                     <div class="settings-grid">
                         <div class="field toggle-field">
+                            <label>Show Overlay</label>
+                            <button id="show-overlay-btn" class="toggle-btn active">
+                                <i class="fa-solid fa-window-maximize"></i> ON
+                            </button>
+                        </div>
+                        <div class="field toggle-field">
                             <label>Show Debug Info</label>
                             <button id="debug-overlay-btn" class="toggle-btn active">
                                 <i class="fa-solid fa-eye"></i> ON
@@ -1495,15 +1501,23 @@
             if (page === "guide") {
                 introPage.style.display = "block";
                 guideTab.classList.add("active");
+                // Stop auto-refresh on guide page (no data to refresh)
+                stopAutoRefresh();
             } else if (page === "daily") {
                 dailyPage.style.display = "block";
                 dailyTab.classList.add("active");
+                // Start auto-refresh for daily data
+                startAutoRefresh();
             } else if (page === "summary") {
                 summaryPage.style.display = "block";
                 summaryTab.classList.add("active");
+                // Start auto-refresh for summary data
+                startAutoRefresh();
             } else if (page === "settings") {
                 settingsPage.style.display = "block";
                 settingsTab.classList.add("active");
+                // Start auto-refresh for settings data
+                startAutoRefresh();
             }
         }
 
@@ -1620,20 +1634,72 @@
             });
 
         // === OVERLAY SETTINGS ===
+        let showOverlay = true;
         let debugOverlayEnabled = true;
         let overlayOnTop = true;
 
-        document.getElementById("debug-overlay-btn").addEventListener("click", function() {
-            debugOverlayEnabled = !debugOverlayEnabled;
-            const btn = this;
-            if (debugOverlayEnabled) {
+        // Function to update toggle button UI
+        function updateToggleButton(btn, isEnabled, iconOn, iconOff) {
+            if (isEnabled) {
                 btn.classList.add("active");
-                btn.innerHTML = '<i class="fa-solid fa-eye"></i> ON';
+                btn.innerHTML = iconOn + ' ON';
             } else {
                 btn.classList.remove("active");
-                btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i> OFF';
+                btn.innerHTML = iconOff + ' OFF';
             }
-            // Send to overlay via IPC if available
+        }
+
+        // Function to load saved settings
+        async function loadOverlaySettings() {
+            try {
+                // Get settings from preloaded data or API
+                if (window.__bluemancing_settings) {
+                    showOverlay = window.__bluemancing_settings.show_overlay !== false;
+                    debugOverlayEnabled = window.__bluemancing_settings.show_debug_overlay !== false;
+                    overlayOnTop = window.__bluemancing_settings.overlay_always_on_top !== false;
+                }
+                
+                // Update UI to match saved settings
+                const showOverlayBtn = document.getElementById("show-overlay-btn");
+                const debugBtn = document.getElementById("debug-overlay-btn");
+                const ontopBtn = document.getElementById("overlay-ontop-btn");
+                
+                updateToggleButton(showOverlayBtn, showOverlay, 
+                    '<i class="fa-solid fa-window-maximize"></i>',
+                    '<i class="fa-solid fa-window-minimize"></i>');
+                updateToggleButton(debugBtn, debugOverlayEnabled,
+                    '<i class="fa-solid fa-eye"></i>',
+                    '<i class="fa-solid fa-eye-slash"></i>');
+                updateToggleButton(ontopBtn, overlayOnTop,
+                    '<i class="fa-solid fa-thumbtack"></i>',
+                    '<i class="fa-solid fa-thumbtack"></i>');
+            } catch (e) {
+                console.warn("Failed to load overlay settings:", e);
+            }
+        }
+
+        // Show Overlay toggle
+        document.getElementById("show-overlay-btn").addEventListener("click", function() {
+            showOverlay = !showOverlay;
+            updateToggleButton(this, showOverlay,
+                '<i class="fa-solid fa-window-maximize"></i>',
+                '<i class="fa-solid fa-window-minimize"></i>');
+            // Save setting via API
+            try {
+                if (window.pywebview && window.pywebview.api.set_show_overlay) {
+                    window.pywebview.api.set_show_overlay(showOverlay);
+                }
+            } catch (e) {
+                console.log("Show overlay setting stored locally");
+            }
+        });
+
+        document.getElementById("debug-overlay-btn").addEventListener("click", function() {
+            debugOverlayEnabled = !debugOverlayEnabled;
+            updateToggleButton(this, debugOverlayEnabled,
+                '<i class="fa-solid fa-eye"></i>',
+                '<i class="fa-solid fa-eye-slash"></i>');
+            // Save setting via API
             try {
                 if (window.pywebview && window.pywebview.api.set_debug_overlay) {
                     window.pywebview.api.set_debug_overlay(debugOverlayEnabled);
@@ -1645,15 +1711,10 @@
 
         document.getElementById("overlay-ontop-btn").addEventListener("click", function() {
             overlayOnTop = !overlayOnTop;
-            const btn = this;
-            if (overlayOnTop) {
-                btn.classList.add("active");
-                btn.innerHTML = '<i class="fa-solid fa-thumbtack"></i> ON';
-            } else {
-                btn.classList.remove("active");
-                btn.innerHTML = '<i class="fa-solid fa-thumbtack"></i> OFF';
-            }
-            // Send to overlay via IPC if available
+            updateToggleButton(this, overlayOnTop,
+                '<i class="fa-solid fa-thumbtack"></i>',
+                '<i class="fa-solid fa-thumbtack"></i>');
+            // Save setting via API
             try {
                 if (window.pywebview && window.pywebview.api.set_overlay_on_top) {
                     window.pywebview.api.set_overlay_on_top(overlayOnTop);
@@ -1663,16 +1724,60 @@
             }
         });
 
+        // === AUTO-REFRESH FUNCTIONALITY ===
+        let autoRefreshInterval = null;
+        const AUTO_REFRESH_INTERVAL_MS = 5000; // Refresh every 5 seconds
+
+        // Refresh functions for each tab
+        async function refreshCurrentPage() {
+            const activePage = document.querySelector('.nav-btn.active');
+            if (!activePage) return;
+
+            const tabId = activePage.id;
+            try {
+                if (tabId === 'tab-daily') {
+                    await loadDaily();
+                } else if (tabId === 'tab-summary') {
+                    await loadSummary();
+                } else if (tabId === 'tab-settings') {
+                    // Refresh settings values
+                    await initKeyButtons();
+                    const res = await window.pywebview.api.get_resolution();
+                    document.getElementById("resolution").value = res;
+                    document.getElementById("res-pill").textContent = res;
+                }
+            } catch (e) {
+                console.warn("Auto-refresh failed:", e);
+            }
+        }
+
+        // Start auto-refresh when on Daily, Summary, or Settings pages
+        function startAutoRefresh() {
+            if (autoRefreshInterval) return;
+            autoRefreshInterval = setInterval(refreshCurrentPage, AUTO_REFRESH_INTERVAL_MS);
+        }
+
+        // Stop auto-refresh
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
         // === INITIALIZE ===
         window.addEventListener("pywebviewready", async () => {
             await loadGuide();
             await loadDaily();
             await loadSummary();
             await initKeyButtons();
+            await loadOverlaySettings();
 
             const res = await window.pywebview.api.get_resolution();
             document.getElementById("resolution").value = res;
             document.getElementById("res-pill").textContent = res;
+
+            // Auto-refresh will be started/stopped based on active tab via showPage()
         });
 
         // === DEFAULT PAGE ===
