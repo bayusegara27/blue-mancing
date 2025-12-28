@@ -70,6 +70,19 @@ impl FishService {
         let id_lower = id.to_lowercase();
         self.fishes.iter().find(|f| f.id.to_lowercase() == id_lower)
     }
+
+    /// Check if a fish exists by ID or name
+    pub fn fish_exists(&self, fish_type: &str) -> bool {
+        let fish_type_lower = fish_type.to_lowercase();
+        self.fishes.iter().any(|f| {
+            f.id.to_lowercase() == fish_type_lower || f.name.to_lowercase() == fish_type_lower
+        })
+    }
+
+    /// Get total number of fish in config
+    pub fn count(&self) -> usize {
+        self.fishes.len()
+    }
 }
 
 #[cfg(test)]

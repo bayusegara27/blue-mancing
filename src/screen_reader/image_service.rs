@@ -260,9 +260,12 @@ impl ImageService {
             return (None, 0.0);
         }
 
-        tracing::debug!(
-            "[FISH_DETECT] Scanning fish templates from: {:?}",
+        tracing::info!(
+            "[FISH_DETECT] OpenCV template matching using fish templates from: {:?}",
             fish_folder
+        );
+        tracing::info!(
+            "[FISH_DETECT] NOTE: Detection uses template images (PNG files), fish_config.json is used for XP values and validation"
         );
 
         let mut best_fish: Option<String> = None;
