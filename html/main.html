@@ -1495,15 +1495,23 @@
             if (page === "guide") {
                 introPage.style.display = "block";
                 guideTab.classList.add("active");
+                // Stop auto-refresh on guide page (no data to refresh)
+                stopAutoRefresh();
             } else if (page === "daily") {
                 dailyPage.style.display = "block";
                 dailyTab.classList.add("active");
+                // Start auto-refresh for daily data
+                startAutoRefresh();
             } else if (page === "summary") {
                 summaryPage.style.display = "block";
                 summaryTab.classList.add("active");
+                // Start auto-refresh for summary data
+                startAutoRefresh();
             } else if (page === "settings") {
                 settingsPage.style.display = "block";
                 settingsTab.classList.add("active");
+                // Start auto-refresh for settings data
+                startAutoRefresh();
             }
         }
 
@@ -1715,8 +1723,7 @@
             document.getElementById("resolution").value = res;
             document.getElementById("res-pill").textContent = res;
 
-            // Start auto-refresh for real-time updates
-            startAutoRefresh();
+            // Auto-refresh will be started/stopped based on active tab via showPage()
         });
 
         // === DEFAULT PAGE ===
