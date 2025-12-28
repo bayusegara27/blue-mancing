@@ -391,14 +391,29 @@ fn post_catch_loop(
                     .join("fish");
                 let mut fish_type: Option<String> = None;
 
+                // Wait a bit for the fish result screen to fully render
+                thread::sleep(Duration::from_millis(500));
+
                 if fish_folder.exists() {
                     tracing::debug!("[FISH] Fish folder exists: {:?}", fish_folder);
-                    for attempt in 0..3 {
-                        tracing::debug!("[FISH] Detection attempt {}/3...", attempt + 1);
-                        println!("[FISH] Detection attempt {}/3...", attempt + 1);
+
+                    // Increase attempts to 5 and wait longer between attempts
+                    let max_attempts = 5;
+                    for attempt in 0..max_attempts {
+                        tracing::debug!(
+                            "[FISH] Detection attempt {}/{}...",
+                            attempt + 1,
+                            max_attempts
+                        );
+                        println!(
+                            "[FISH] Detection attempt {}/{}...",
+                            attempt + 1,
+                            max_attempts
+                        );
                         SHARED_STATE.set_detail_message(format!(
-                            "Detecting fish (attempt {}/3)...",
-                            attempt + 1
+                            "Detecting fish (attempt {}/{})...",
+                            attempt + 1,
+                            max_attempts
                         ));
                         let (detected, score) =
                             image_service.find_best_matching_fish(Some(rect), None);
@@ -421,8 +436,8 @@ fn post_catch_loop(
                                 println!("[CONFIG] ⚠ Fish '{}' not found in fish_config.json", ft);
                             }
 
-                            // Lower threshold from 0.7 to 0.6 for better detection
-                            if score >= 0.6 {
+                            // Lower threshold to 0.5 for better detection
+                            if score >= 0.5 {
                                 tracing::info!(
                                     "[FISH] Fish detected: '{}' (score: {:.3})",
                                     ft,
@@ -441,11 +456,11 @@ fn post_catch_loop(
                                 break;
                             } else {
                                 tracing::debug!(
-                                    "[FISH] Score {:.3} below threshold 0.6, retrying...",
+                                    "[FISH] Score {:.3} below threshold 0.5, retrying...",
                                     score
                                 );
                                 println!(
-                                    "[FISH] Score {:.3} below threshold 0.6, retrying...",
+                                    "[FISH] Score {:.3} below threshold 0.5, retrying...",
                                     score
                                 );
                             }
@@ -456,13 +471,20 @@ fn post_catch_loop(
                             );
                             println!("[FISH] No fish match found on attempt {}", attempt + 1);
                         }
-                        thread::sleep(Duration::from_millis(200));
+                        // Wait longer between attempts (500ms instead of 200ms)
+                        thread::sleep(Duration::from_millis(500));
                     }
 
                     // Log final result
                     if fish_type.is_none() {
-                        tracing::warn!("[FISH] Failed to detect fish type after 3 attempts");
-                        println!("[FISH] ✗ Failed to detect fish type after 3 attempts");
+                        tracing::warn!(
+                            "[FISH] Failed to detect fish type after {} attempts",
+                            max_attempts
+                        );
+                        println!(
+                            "[FISH] ✗ Failed to detect fish type after {} attempts",
+                            max_attempts
+                        );
                     }
                 } else {
                     tracing::warn!("[FISH] Fish folder does not exist: {:?}", fish_folder);
