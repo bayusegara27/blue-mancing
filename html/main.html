@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="en">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>BPSR Fishing — Aqua Dashboard</title>
+    <title>Blue Mancing — Dashboard</title>
 
-    <script src="https://kit.fontawesome.com/fc0cae2ea4.js" crossorigin="anonymous"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Viga&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
@@ -26,8 +26,8 @@
         body {
             height: 100%;
             margin: 0;
-            background: linear-gradient(180deg, #001523 0%, #041022 100%);
-            font-family: "Viga", sans-serif;
+            background: linear-gradient(135deg, #0a1628 0%, #071422 50%, #0d1a2d 100%);
+            font-family: "Inter", sans-serif;
             color: var(--text);
             overflow-x: hidden;
             position: relative;
@@ -925,6 +925,90 @@
             letter-spacing: 0.3px;
         }
 
+        /* Brand Logo in Navbar */
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 700;
+            color: #38c6ff;
+            text-shadow: 0 0 12px rgba(56, 198, 255, 0.5);
+            margin-right: 20px;
+        }
+
+        .brand-logo i {
+            font-size: 20px;
+            background: linear-gradient(135deg, #38c6ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Toggle Button Styles */
+        .toggle-btn {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(34, 197, 94, 0.15));
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            color: #4ade80;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .toggle-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.25);
+        }
+
+        .toggle-btn:not(.active) {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(239, 68, 68, 0.15));
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #f87171;
+        }
+
+        .toggle-btn:not(.active):hover {
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+        }
+
+        .toggle-field {
+            flex-direction: row !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            padding: 8px 0;
+        }
+
+        .toggle-field label {
+            margin-bottom: 0 !important;
+        }
+
+        /* Settings Footer */
+        .settings-footer {
+            margin-top: 28px;
+            padding: 20px;
+            border-radius: 14px;
+            background: linear-gradient(180deg, rgba(10, 40, 60, 0.35), rgba(0, 20, 40, 0.35));
+            border: 1px solid rgba(56, 198, 255, 0.1);
+            text-align: center;
+            color: #8fcfff;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .settings-footer i {
+            color: #38c6ff;
+        }
+
         #page-settings {
             padding: 20px 30px;
             display: grid;
@@ -1218,13 +1302,14 @@
     <!-- navbar -->
     <div class="navbar">
         <div class="nav-inner">
-            <!-- LEFT: GitHub + Support -->
+            <!-- LEFT: Brand + Links -->
             <div class="nav-left">
-                <a href="https://github.com/rdsp04/bpsr-fishing" target="_blank" class="nav-link">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-fish"></i>
+                    <span>Blue Mancing</span>
+                </div>
+                <a href="https://github.com/bayusegara27/blue-mancing" target="_blank" class="nav-link">
                     <i class="fa-brands fa-github"></i> GitHub
-                </a>
-                <a href="https://discord.gg/wTxyvZBN2M" target="_blank" class="nav-link">
-                    <i class="fa-brands fa-discord"></i> Support Server
                 </a>
             </div>
 
@@ -1234,22 +1319,19 @@
                     <i class="fa-solid fa-book"></i> Guide
                 </button>
                 <button id="tab-daily" class="nav-btn">
-                    <i class="fa-solid fa-scroll"></i> Daily
+                    <i class="fa-solid fa-calendar-days"></i> Daily
                 </button>
                 <button id="tab-summary" class="nav-btn">
-                    <i class="fa-solid fa-fish-fins"></i> Summary
+                    <i class="fa-solid fa-chart-pie"></i> Summary
                 </button>
                 <button id="tab-settings" class="nav-btn">
                     <i class="fa-solid fa-gear"></i> Settings
-                </button>
-                <button id="reset-btn" class="nav-btn" title="Reset Interface">
-                    <i class="fa-solid fa-rotate-right"></i>
                 </button>
             </div>
 
             <!-- RIGHT: Version -->
             <div class="nav-right">
-                <span class="version-pill">v1.2.1</span>
+                <span class="version-pill">v2.0.0</span>
             </div>
         </div>
     </div>
@@ -1269,8 +1351,28 @@
             </div>
 
             <div class="settings-sections">
+                <!-- Overlay Settings -->
                 <div class="settings-section">
-                    <h3>App Settings</h3>
+                    <h3><i class="fa-solid fa-window-restore"></i> Overlay Settings</h3>
+                    <div class="settings-grid">
+                        <div class="field toggle-field">
+                            <label>Show Debug Info</label>
+                            <button id="debug-overlay-btn" class="toggle-btn active">
+                                <i class="fa-solid fa-eye"></i> ON
+                            </button>
+                        </div>
+                        <div class="field toggle-field">
+                            <label>Overlay Always On Top</label>
+                            <button id="overlay-ontop-btn" class="toggle-btn active">
+                                <i class="fa-solid fa-thumbtack"></i> ON
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- App Settings -->
+                <div class="settings-section">
+                    <h3><i class="fa-solid fa-keyboard"></i> App Settings</h3>
                     <div class="settings-grid">
                         <div class="field">
                             <label>Start Key</label>
@@ -1283,8 +1385,9 @@
                     </div>
                 </div>
 
+                <!-- Game Settings -->
                 <div class="settings-section">
-                    <h3>Game Settings</h3>
+                    <h3><i class="fa-solid fa-gamepad"></i> Game Settings</h3>
                     <div class="settings-grid">
                         <div class="field">
                             <label>Fish Key</label>
@@ -1313,8 +1416,9 @@
                     </div>
                 </div>
 
+                <!-- Coming Soon -->
                 <div class="settings-section not-available">
-                    <h3 class="warning-title">Not Yet Available</h3>
+                    <h3 class="warning-title"><i class="fa-solid fa-clock"></i> Coming Soon</h3>
                     <div class="settings-grid">
                         <div class="field">
                             <label>Auto Bait</label>
@@ -1332,23 +1436,8 @@
                 </div>
             </div>
 
-            <div class="settings-footer" style="
-            margin-top: 28px;
-            padding: 20px;
-            border-radius: 14px;
-            background: linear-gradient(
-              180deg,
-              rgba(10, 40, 60, 0.35),
-              rgba(0, 20, 40, 0.35)
-            );
-            border: 1px solid rgba(56, 198, 255, 0.1);
-            text-align: center;
-            color: #8fcfff;
-            font-size: 15px;
-            font-weight: 600;
-            letter-spacing: 1px;
-          ">
-                💧 More features coming soon...
+            <div class="settings-footer">
+                <i class="fa-solid fa-fish"></i> Blue Mancing — More features coming soon...
             </div>
         </div>
 
@@ -1529,6 +1618,50 @@
                 btn.textContent = next;
                 await window.pywebview.api.set_auto_rod(next);
             });
+
+        // === OVERLAY SETTINGS ===
+        let debugOverlayEnabled = true;
+        let overlayOnTop = true;
+
+        document.getElementById("debug-overlay-btn").addEventListener("click", function() {
+            debugOverlayEnabled = !debugOverlayEnabled;
+            const btn = this;
+            if (debugOverlayEnabled) {
+                btn.classList.add("active");
+                btn.innerHTML = '<i class="fa-solid fa-eye"></i> ON';
+            } else {
+                btn.classList.remove("active");
+                btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i> OFF';
+            }
+            // Send to overlay via IPC if available
+            try {
+                if (window.pywebview && window.pywebview.api.set_debug_overlay) {
+                    window.pywebview.api.set_debug_overlay(debugOverlayEnabled);
+                }
+            } catch (e) {
+                console.log("Debug overlay setting stored locally");
+            }
+        });
+
+        document.getElementById("overlay-ontop-btn").addEventListener("click", function() {
+            overlayOnTop = !overlayOnTop;
+            const btn = this;
+            if (overlayOnTop) {
+                btn.classList.add("active");
+                btn.innerHTML = '<i class="fa-solid fa-thumbtack"></i> ON';
+            } else {
+                btn.classList.remove("active");
+                btn.innerHTML = '<i class="fa-solid fa-thumbtack"></i> OFF';
+            }
+            // Send to overlay via IPC if available
+            try {
+                if (window.pywebview && window.pywebview.api.set_overlay_on_top) {
+                    window.pywebview.api.set_overlay_on_top(overlayOnTop);
+                }
+            } catch (e) {
+                console.log("Overlay on top setting stored locally");
+            }
+        });
 
         // === INITIALIZE ===
         window.addEventListener("pywebviewready", async () => {

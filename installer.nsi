@@ -9,21 +9,21 @@
 Icon "icons/icon.ico"
 UninstallIcon "icons/icon.ico"
 
-!define AppName "bpsr-fishing"
-!define AppId "bpsr-fishing"
+!define AppName "Blue Mancing"
+!define AppId "blue-mancing"
 ; AppVersion can be passed from command line: makensis /DAppVersion=x.y.z installer.nsi
 !ifndef AppVersion
-  !define AppVersion "1.2.1"
+  !define AppVersion "2.0.0"
 !endif
-!define AppExecutable "bpsr-fishing.exe"
-!define AppDLL "opencv_world4100.dll" ; [EDIT] Definisi nama DLL
-!define InstallerFile "${AppName}_${AppVersion}_x64-Setup.exe"
+!define AppExecutable "blue-mancing.exe"
+!define AppDLL "opencv_world4100.dll"
+!define InstallerFile "${AppId}_${AppVersion}_x64-Setup.exe"
 !define LicenseFile "LICENSE"
 !define UninstallRegKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}"
 
 Name "${AppName}"
 OutFile "${InstallerFile}"
-InstallDir "$LOCALAPPDATA\${AppName}"
+InstallDir "$LOCALAPPDATA\${AppId}"
 RequestExecutionLevel user
 
 ;----------------

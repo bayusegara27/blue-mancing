@@ -123,7 +123,7 @@ pub fn start_ui() {
     
     // Create main window
     let main_window = WindowBuilder::new()
-        .with_title("bpsr-fishing Stats")
+        .with_title("Blue Mancing - Dashboard")
         .with_inner_size(tao::dpi::LogicalSize::new(940, 600))
         .with_min_inner_size(tao::dpi::LogicalSize::new(900, 600))
         .with_resizable(true)
@@ -136,13 +136,13 @@ pub fn start_ui() {
         .expect("Failed to create main webview");
     
     register_window(Window::Main, WindowHandle {
-        title: "bpsr-fishing Stats".to_string(),
+        title: "Blue Mancing - Dashboard".to_string(),
     });
     
-    // Create overlay window
+    // Create overlay window - compact size
     let overlay_window = WindowBuilder::new()
-        .with_title("bpsr-fishing Overlay")
-        .with_inner_size(tao::dpi::LogicalSize::new(380, 220))
+        .with_title("Blue Mancing")
+        .with_inner_size(tao::dpi::LogicalSize::new(260, 280))
         .with_resizable(false)
         .with_decorations(false)
         .with_always_on_top(true)
@@ -168,7 +168,7 @@ pub fn start_ui() {
     let overlay_webview_clone = overlay_webview.clone();
     
     register_window(Window::Overlay, WindowHandle {
-        title: "bpsr-fishing Overlay".to_string(),
+        title: "Blue Mancing".to_string(),
     });
     
     // Spawn a thread to periodically update the overlay with bot status
@@ -235,7 +235,7 @@ fn get_default_overlay_html() -> &'static str {
 <html>
 <head>
     <meta charset="utf-8">
-    <title>BPSR Fishing Overlay</title>
+    <title>Blue Mancing Overlay</title>
     <style>
         body {
             font-family: 'Segoe UI', sans-serif;
@@ -253,7 +253,7 @@ fn get_default_overlay_html() -> &'static str {
         .title {
             font-size: 14px;
             font-weight: bold;
-            color: #00ffc8;
+            color: #38c6ff;
         }
         .controls {
             display: flex;
@@ -343,7 +343,7 @@ fn get_default_overlay_html() -> &'static str {
 </head>
 <body>
     <div class="header">
-        <span class="title">BPSR Fishing</span>
+        <span class="title">Blue Mancing</span>
         <div class="controls">
             <button class="btn btn-start" id="start-btn">Start</button>
             <button class="btn btn-stop" id="stop-btn">Stop</button>
@@ -484,17 +484,17 @@ fn get_default_main_html() -> &'static str {
 <html>
 <head>
     <meta charset="utf-8">
-    <title>BPSR Fishing Stats</title>
+    <title>Blue Mancing - Dashboard</title>
     <style>
         body {
             font-family: 'Segoe UI', sans-serif;
-            background: #0f0f23;
+            background: #0a1628;
             color: #fff;
             margin: 0;
             padding: 20px;
         }
         h1 {
-            color: #00ffc8;
+            color: #38c6ff;
             text-align: center;
         }
         .container {
@@ -505,7 +505,7 @@ fn get_default_main_html() -> &'static str {
 </head>
 <body>
     <div class="container">
-        <h1>BPSR Fishing Stats</h1>
+        <h1>Blue Mancing</h1>
         <p style="text-align: center; color: #aaa;">Loading...</p>
     </div>
 </body>

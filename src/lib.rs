@@ -1,4 +1,4 @@
-//! BPSR Fishing - Auto fishing bot for Blue Protocol: Star Resonance
+//! Blue Mancing - Auto fishing bot for Blue Protocol: Star Resonance
 //! 
 //! This application automates fishing in the game Blue Protocol: Star Resonance.
 //! It uses screen capture and template matching to detect game states and
