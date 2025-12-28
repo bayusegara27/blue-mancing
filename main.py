@@ -345,6 +345,9 @@ def post_catch_loop(window_title):
 
                 # Click saved continue position with retries
                 for attempt in range(3):
+                    # Focus window before clicking to ensure click goes to the right place
+                    select_window()
+                    
                     if saved_continue_pos:
                         click(*saved_continue_pos)
                         time.sleep(0.5)
@@ -372,11 +375,18 @@ def post_catch_loop(window_title):
                     if not still_there:
                         break
 
+                # Release any held movement keys before returning
+                release_key(get_pykey("left_key"))
+                release_key(get_pykey("right_key"))
+                
                 return
 
             elif default_found:
                 print("Default screen detected, minigame failed. Releasing click.")
                 mouse.release(Button.left)
+                # Release any held movement keys before returning
+                release_key(get_pykey("left_key"))
+                release_key(get_pykey("right_key"))
                 log_catch(False)
                 session_stats["misses"] += 1
                 total = session_stats["catches"] + session_stats["misses"]
@@ -519,6 +529,11 @@ def restart_macro():
 def handle_no_progress_loop(window_title):
     global last_progress_time, macro_start_event
     print("restart")
+
+    # Release mouse button and any held movement keys before recovery
+    mouse.release(Button.left)
+    release_key(get_pykey("left_key"))
+    release_key(get_pykey("right_key"))
 
     esc_key = get_key("esc_key")
     fish_key = get_key("fish_key")
