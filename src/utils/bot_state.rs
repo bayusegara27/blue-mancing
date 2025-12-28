@@ -7,6 +7,25 @@ use parking_lot::RwLock;
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// A detected region for visualization (ESP-like box)
+#[derive(Debug, Clone, Serialize)]
+pub struct DetectionBox {
+    /// X coordinate (screen coordinates)
+    pub x: i32,
+    /// Y coordinate (screen coordinates)
+    pub y: i32,
+    /// Width of the box
+    pub width: i32,
+    /// Height of the box
+    pub height: i32,
+    /// Label for the detection (e.g., "fish", "continue_btn", "arrow")
+    pub label: String,
+    /// Confidence score (0.0 - 1.0)
+    pub confidence: f32,
+    /// Color in hex format (e.g., "#FF0000" for red)
+    pub color: String,
+}
+
 /// Bot activity status for detailed status display
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub enum BotActivity {
@@ -75,6 +94,10 @@ pub struct SharedBotState {
     activity: RwLock<BotActivity>,
     stats: RwLock<SharedStats>,
     detail_message: RwLock<String>,
+    /// Detection boxes for ESP-like visualization
+    detection_boxes: RwLock<Vec<DetectionBox>>,
+    /// Game window rectangle (x, y, width, height)
+    game_window_rect: RwLock<Option<(i32, i32, i32, i32)>>,
 }
 
 impl SharedBotState {
@@ -84,6 +107,8 @@ impl SharedBotState {
             activity: RwLock::new(BotActivity::Idle),
             stats: RwLock::new(SharedStats::default()),
             detail_message: RwLock::new(String::new()),
+            detection_boxes: RwLock::new(Vec::new()),
+            game_window_rect: RwLock::new(None),
         }
     }
 
@@ -171,6 +196,36 @@ impl SharedBotState {
         *self.stats.write() = SharedStats::default();
     }
 
+    /// Add a detection box for visualization
+    pub fn add_detection_box(&self, detection: DetectionBox) {
+        self.detection_boxes.write().push(detection);
+    }
+
+    /// Clear all detection boxes
+    pub fn clear_detection_boxes(&self) {
+        self.detection_boxes.write().clear();
+    }
+
+    /// Get all detection boxes
+    pub fn get_detection_boxes(&self) -> Vec<DetectionBox> {
+        self.detection_boxes.read().clone()
+    }
+
+    /// Set detection boxes (replaces all)
+    pub fn set_detection_boxes(&self, boxes: Vec<DetectionBox>) {
+        *self.detection_boxes.write() = boxes;
+    }
+
+    /// Set game window rectangle
+    pub fn set_game_window_rect(&self, rect: Option<(i32, i32, i32, i32)>) {
+        *self.game_window_rect.write() = rect;
+    }
+
+    /// Get game window rectangle
+    pub fn get_game_window_rect(&self) -> Option<(i32, i32, i32, i32)> {
+        *self.game_window_rect.read()
+    }
+
     /// Get status as JSON string for UI
     pub fn to_json(&self) -> String {
         let stats = self.get_stats();
@@ -187,6 +242,18 @@ impl SharedBotState {
                 "xp": stats.xp,
                 "rate": format!("{:.2}", stats.rate)
             }
+        })
+        .to_string()
+    }
+
+    /// Get detection boxes as JSON string for ESP overlay
+    pub fn detection_boxes_to_json(&self) -> String {
+        let boxes = self.get_detection_boxes();
+        let window_rect = self.get_game_window_rect();
+
+        serde_json::json!({
+            "boxes": boxes,
+            "window": window_rect
         })
         .to_string()
     }
