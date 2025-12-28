@@ -286,10 +286,12 @@ fn post_catch_loop(
                 SHARED_STATE.set_activity(BotActivity::WaitingForContinue);
                 SHARED_STATE.set_detail_message("Continue button found!");
                 
-                // Save continue position
-                let mut saved_pos = state.saved_continue_pos.lock();
-                if saved_pos.is_none() {
-                    *saved_pos = Some(pos);
+                // Save continue position (use a block to drop the lock immediately)
+                {
+                    let mut saved_pos = state.saved_continue_pos.lock();
+                    if saved_pos.is_none() {
+                        *saved_pos = Some(pos);
+                    }
                 }
                 
                 println!("Continue button found, releasing click");
