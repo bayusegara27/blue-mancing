@@ -212,6 +212,24 @@ fn handle_dashboard_ipc(message: &str) -> String {
             let value = stats.get_show_overlay();
             serde_json::to_string(&value).unwrap_or_else(|_| "true".to_string())
         }
+        "set_detection_boxes" => {
+            let value = parsed
+                .get("value")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let mut stats = StatsApi::new();
+            stats.set_show_detection_boxes(value);
+            r#"{"success": true}"#.to_string()
+        }
+        "get_detection_boxes" => {
+            let stats = StatsApi::new();
+            let value = stats.get_show_detection_boxes();
+            serde_json::to_string(&value).unwrap_or_else(|_| "false".to_string())
+        }
+        "get_detection_data" => {
+            // Return current detection boxes for ESP overlay
+            SHARED_STATE.detection_boxes_to_json()
+        }
         "set_auto_bait" | "set_auto_rod" => {
             // TODO: These settings need full implementation
             r#"{"success": true}"#.to_string()
@@ -287,6 +305,17 @@ fn inject_api_bridge(html: &str) -> String {
             },
             get_show_overlay: function() {
                 return callApi('get_show_overlay', {});
+            },
+            set_detection_boxes: function(value) {
+                // Update preloaded value
+                window.__bluemancing_settings.show_detection_boxes = value;
+                return callApi('set_detection_boxes', { value: value });
+            },
+            get_detection_boxes: function() {
+                return callApi('get_detection_boxes', {});
+            },
+            get_detection_data: function() {
+                return callApi('get_detection_data', {});
             }
         }
     };
@@ -347,6 +376,8 @@ fn inject_api_bridge(html: &str) -> String {
                 return window.__bluemancing_settings && window.__bluemancing_settings.overlay_always_on_top;
             case 'get_show_overlay':
                 return window.__bluemancing_settings && window.__bluemancing_settings.show_overlay;
+            case 'get_detection_boxes':
+                return window.__bluemancing_settings && window.__bluemancing_settings.show_detection_boxes;
             default:
                 return null;
         }
@@ -496,9 +527,13 @@ fn get_overlay_settings_json() -> String {
         settings.overlay_always_on_top,
     );
     result.insert("show_overlay".to_string(), settings.show_overlay);
+    result.insert(
+        "show_detection_boxes".to_string(),
+        settings.show_detection_boxes,
+    );
 
     serde_json::to_string(&result).unwrap_or_else(|_| {
-        r#"{"show_debug_overlay":true,"overlay_always_on_top":true,"show_overlay":true}"#
+        r#"{"show_debug_overlay":true,"overlay_always_on_top":true,"show_overlay":true,"show_detection_boxes":false}"#
             .to_string()
     })
 }
@@ -509,6 +544,7 @@ fn get_overlay_settings_json() -> String {
 enum UserEvent {
     UpdateOverlay,
     UpdateDashboard,
+    UpdateEspOverlay,
 }
 
 /// Start the UI (main entry point)
@@ -533,6 +569,8 @@ pub fn start_ui() {
         .unwrap_or_else(|_| get_default_overlay_html().to_string());
     let main_html = fs::read_to_string(html_path.join("main.html"))
         .unwrap_or_else(|_| get_default_main_html().to_string());
+    let esp_html = fs::read_to_string(html_path.join("esp_overlay.html"))
+        .unwrap_or_else(|_| get_default_esp_overlay_html().to_string());
 
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
@@ -612,10 +650,36 @@ pub fn start_ui() {
         },
     );
 
+    // Create ESP overlay window for detection box visualization
+    // This window will be transparent and positioned over the game window
+    let esp_window = WindowBuilder::new()
+        .with_title("Blue Mancing - ESP")
+        .with_inner_size(tao::dpi::LogicalSize::new(1920, 1080))
+        .with_resizable(false)
+        .with_decorations(false)
+        .with_always_on_top(true)
+        .with_transparent(true)
+        .with_visible(false) // Start hidden
+        .build(&event_loop)
+        .expect("Failed to create ESP overlay window");
+
+    let esp_window_id = esp_window.id();
+
+    // Build ESP webview
+    let esp_webview = WebViewBuilder::new()
+        .with_html(&esp_html)
+        .with_transparent(true)
+        .build(&esp_window)
+        .expect("Failed to create ESP webview");
+
+    let esp_webview = Arc::new(parking_lot::Mutex::new(esp_webview));
+    let esp_webview_clone = esp_webview.clone();
+
     // Spawn a thread to periodically update the overlay with bot status
     // Using 250ms interval to balance responsiveness and CPU usage
     let proxy_clone = proxy.clone();
     let proxy_clone2 = proxy.clone();
+    let proxy_clone3 = proxy.clone();
     thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_millis(250));
@@ -633,6 +697,17 @@ pub fn start_ui() {
 
             // Send dashboard update event to main thread
             let _ = proxy_clone2.send_event(UserEvent::UpdateDashboard);
+        }
+    });
+
+    // Spawn a thread to periodically update ESP overlay
+    // Using 100ms interval for smooth box updates
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(100));
+
+            // Send ESP update event to main thread
+            let _ = proxy_clone3.send_event(UserEvent::UpdateEspOverlay);
         }
     });
 
@@ -669,6 +744,32 @@ pub fn start_ui() {
                     let _ = webview.evaluate_script(&settings_js);
                 }
             }
+            Event::UserEvent(UserEvent::UpdateEspOverlay) => {
+                // Read current overlay settings
+                let settings = OverlaySettings::load();
+
+                // Update ESP window visibility based on setting
+                esp_window.set_visible(settings.show_detection_boxes);
+
+                if settings.show_detection_boxes {
+                    // Position ESP window over the game window
+                    if let Some((x, y, w, h)) = SHARED_STATE.get_game_window_rect() {
+                        let _ = esp_window.set_outer_position(tao::dpi::PhysicalPosition::new(x, y));
+                        let _ = esp_window.set_inner_size(tao::dpi::PhysicalSize::new(w as u32, h as u32));
+                    }
+
+                    // Update ESP overlay with detection boxes
+                    let detection_json = SHARED_STATE.detection_boxes_to_json();
+                    let esp_js = format!(
+                        "if (window.updateDetectionBoxes) {{ window.updateDetectionBoxes({}); }}",
+                        detection_json
+                    );
+
+                    if let Some(webview) = esp_webview_clone.try_lock() {
+                        let _ = webview.evaluate_script(&esp_js);
+                    }
+                }
+            }
             Event::UserEvent(UserEvent::UpdateDashboard) => {
                 // Refresh dashboard data by updating the preloaded variables
                 let daily_data = get_daily_html();
@@ -702,7 +803,7 @@ pub fn start_ui() {
                 window_id,
                 ..
             } => {
-                if window_id == overlay_window_id {
+                if window_id == overlay_window_id || window_id == esp_window_id {
                     // Don't close the entire app when overlay is closed
                     // Just hide the overlay (in a full implementation)
                 } else {
@@ -1005,6 +1106,75 @@ fn get_default_main_html() -> &'static str {
         <h1>Blue Mancing</h1>
         <p style="text-align: center; color: #aaa;">Loading...</p>
     </div>
+</body>
+</html>"#
+}
+
+/// Default ESP overlay HTML for detection box visualization
+fn get_default_esp_overlay_html() -> &'static str {
+    r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Blue Mancing - Detection Overlay</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden; background: transparent;
+      pointer-events: none;
+    }
+    .detection-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .detection-box {
+      position: absolute;
+      border: 2px solid #ff0000;
+      background: rgba(255, 0, 0, 0.1);
+      pointer-events: none;
+      box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+    }
+    .detection-box.fish { border-color: #00ff00; background: rgba(0, 255, 0, 0.1); box-shadow: 0 0 10px rgba(0, 255, 0, 0.5); }
+    .detection-box.button { border-color: #00aaff; background: rgba(0, 170, 255, 0.1); box-shadow: 0 0 10px rgba(0, 170, 255, 0.5); }
+    .detection-box.arrow { border-color: #ffaa00; background: rgba(255, 170, 0, 0.1); box-shadow: 0 0 10px rgba(255, 170, 0, 0.5); }
+    .detection-label {
+      position: absolute; top: -20px; left: 0;
+      background: rgba(0, 0, 0, 0.8); color: #fff;
+      font-family: 'Segoe UI', sans-serif; font-size: 11px; font-weight: bold;
+      padding: 2px 6px; border-radius: 3px; white-space: nowrap;
+    }
+    .detection-label .confidence { color: #ffff00; margin-left: 4px; }
+  </style>
+</head>
+<body>
+  <div id="detection-container" class="detection-canvas"></div>
+  <script>
+    const container = document.getElementById('detection-container');
+    window.updateDetectionBoxes = function(data) {
+      container.innerHTML = '';
+      if (!data || !data.boxes || data.boxes.length === 0) return;
+      const windowRect = data.window;
+      const offsetX = windowRect ? windowRect[0] : 0;
+      const offsetY = windowRect ? windowRect[1] : 0;
+      for (const box of data.boxes) {
+        const boxEl = document.createElement('div');
+        boxEl.className = 'detection-box';
+        const label = box.label.toLowerCase();
+        if (label.includes('fish')) boxEl.classList.add('fish');
+        else if (label.includes('button') || label.includes('continue')) boxEl.classList.add('button');
+        else if (label.includes('arrow')) boxEl.classList.add('arrow');
+        if (box.color) { boxEl.style.borderColor = box.color; boxEl.style.boxShadow = '0 0 10px ' + box.color + '80'; }
+        boxEl.style.left = (box.x - offsetX) + 'px';
+        boxEl.style.top = (box.y - offsetY) + 'px';
+        boxEl.style.width = box.width + 'px';
+        boxEl.style.height = box.height + 'px';
+        const labelEl = document.createElement('div');
+        labelEl.className = 'detection-label';
+        labelEl.innerHTML = box.label + '<span class="confidence">' + (box.confidence * 100).toFixed(0) + '%</span>';
+        boxEl.appendChild(labelEl);
+        container.appendChild(boxEl);
+      }
+    };
+    window.clearDetectionBoxes = function() { container.innerHTML = ''; };
+  </script>
 </body>
 </html>"#
 }

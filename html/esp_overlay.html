@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Blue Mancing - Detection Overlay</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    .detection-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .detection-box {
+      position: absolute;
+      border: 2px solid #ff0000;
+      background: rgba(255, 0, 0, 0.1);
+      pointer-events: none;
+      box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+    }
+
+    .detection-box.fish {
+      border-color: #00ff00;
+      background: rgba(0, 255, 0, 0.1);
+      box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+    }
+
+    .detection-box.button {
+      border-color: #00aaff;
+      background: rgba(0, 170, 255, 0.1);
+      box-shadow: 0 0 10px rgba(0, 170, 255, 0.5);
+    }
+
+    .detection-box.arrow {
+      border-color: #ffaa00;
+      background: rgba(255, 170, 0, 0.1);
+      box-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
+    }
+
+    .detection-label {
+      position: absolute;
+      top: -20px;
+      left: 0;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+      text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+    }
+
+    .detection-label .confidence {
+      color: #ffff00;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="detection-container" class="detection-canvas"></div>
+
+  <script>
+    const container = document.getElementById('detection-container');
+    
+    // Called from Rust to update detection boxes
+    window.updateDetectionBoxes = function(data) {
+      // Clear existing boxes
+      container.innerHTML = '';
+      
+      if (!data || !data.boxes || data.boxes.length === 0) {
+        return;
+      }
+      
+      // Get window offset if available
+      const windowRect = data.window;
+      const offsetX = windowRect ? windowRect[0] : 0;
+      const offsetY = windowRect ? windowRect[1] : 0;
+      
+      // Create detection boxes
+      for (const box of data.boxes) {
+        const boxEl = document.createElement('div');
+        boxEl.className = 'detection-box';
+        
+        // Add type-specific class
+        const label = box.label.toLowerCase();
+        if (label.includes('fish')) {
+          boxEl.classList.add('fish');
+        } else if (label.includes('button') || label.includes('continue')) {
+          boxEl.classList.add('button');
+        } else if (label.includes('arrow')) {
+          boxEl.classList.add('arrow');
+        }
+        
+        // Apply custom color if provided
+        if (box.color) {
+          boxEl.style.borderColor = box.color;
+          boxEl.style.boxShadow = `0 0 10px ${box.color}80`;
+        }
+        
+        // Position the box (relative to this overlay window)
+        boxEl.style.left = `${box.x - offsetX}px`;
+        boxEl.style.top = `${box.y - offsetY}px`;
+        boxEl.style.width = `${box.width}px`;
+        boxEl.style.height = `${box.height}px`;
+        
+        // Add label
+        const labelEl = document.createElement('div');
+        labelEl.className = 'detection-label';
+        labelEl.innerHTML = `${box.label}<span class="confidence">${(box.confidence * 100).toFixed(0)}%</span>`;
+        boxEl.appendChild(labelEl);
+        
+        container.appendChild(boxEl);
+      }
+    };
+    
+    // Clear all detection boxes
+    window.clearDetectionBoxes = function() {
+      container.innerHTML = '';
+    };
+  </script>
+</body>
+</html>

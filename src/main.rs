@@ -32,7 +32,7 @@ use fish::FishService;
 use input::{click, hold_key, mouse_move, mouse_press, mouse_release, press_key, release_key};
 use log_main::{load_sessions, log_broken_rod, log_catch, save_sessions, Session};
 use screen_reader::{get_resolution_folder, ImageService};
-use utils::bot_state::{BotActivity, SHARED_STATE};
+use utils::bot_state::{BotActivity, DetectionBox, SHARED_STATE};
 use utils::keybinds::{get_keys, get_pykey, string_to_code};
 use utils::path::get_data_dir;
 use utils::spelling::fix_spelling;
@@ -595,13 +595,21 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
             Some(r) => r,
             None => {
                 SHARED_STATE.set_detail_message("Waiting for game window...");
+                SHARED_STATE.clear_detection_boxes();
                 thread::sleep(CHECK_INTERVAL);
                 continue;
             }
         };
 
+        // Update game window rect for ESP overlay
+        let (x1, y1, x2, y2) = rect;
+        SHARED_STATE.set_game_window_rect(Some((x1, y1, x2 - x1, y2 - y1)));
+
         let base = get_data_dir();
         let res_folder = get_resolution_folder();
+
+        // Clear detection boxes at start of each loop iteration
+        let mut detection_boxes: Vec<DetectionBox> = Vec::new();
 
         // Check for default screen
         let default_path = base
@@ -609,10 +617,20 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
             .join(&res_folder)
             .join("default_screen.png");
 
-        if image_service
-            .find_image_in_window(Some(rect), &default_path, THRESHOLD)
-            .is_some()
+        if let Some((dx, dy)) =
+            image_service.find_image_in_window(Some(rect), &default_path, THRESHOLD)
         {
+            // Add detection box for default screen
+            detection_boxes.push(DetectionBox {
+                x: dx - 50,
+                y: dy - 25,
+                width: 100,
+                height: 50,
+                label: "Default Screen".to_string(),
+                confidence: THRESHOLD,
+                color: "#00ff00".to_string(),
+            });
+
             state.update_progress();
             SHARED_STATE.set_activity(BotActivity::WaitingForDefaultScreen);
             SHARED_STATE.set_detail_message("Fishing spot found");
@@ -624,10 +642,21 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
                 .join(&res_folder)
                 .join("broken_pole.png");
 
-            if image_service
-                .find_image_in_window(Some(rect), &broken_path, 0.9)
-                .is_some()
+            if let Some((bx, by)) =
+                image_service.find_image_in_window(Some(rect), &broken_path, 0.9)
             {
+                // Add detection box for broken rod
+                detection_boxes.push(DetectionBox {
+                    x: bx - 40,
+                    y: by - 20,
+                    width: 80,
+                    height: 40,
+                    label: "Broken Rod!".to_string(),
+                    confidence: 0.9,
+                    color: "#ff0000".to_string(),
+                });
+                SHARED_STATE.set_detection_boxes(detection_boxes.clone());
+
                 println!("Broken pole detected -> pressing rods key");
                 SHARED_STATE.set_activity(BotActivity::HandlingBrokenRod);
                 SHARED_STATE.set_detail_message("Broken rod! Selecting new rod...");
@@ -650,6 +679,17 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
                 if let Some(pos) =
                     image_service.find_image_in_window(Some(rect), &use_rod_path, 0.9)
                 {
+                    // Add detection box for use rod button
+                    SHARED_STATE.set_detection_boxes(vec![DetectionBox {
+                        x: pos.0 - 40,
+                        y: pos.1 - 15,
+                        width: 80,
+                        height: 30,
+                        label: "Use Rod".to_string(),
+                        confidence: 0.9,
+                        color: "#00aaff".to_string(),
+                    }]);
+
                     SHARED_STATE.set_activity(BotActivity::SelectingNewRod);
                     SHARED_STATE.set_detail_message("Clicking Use Rod button...");
                     state.update_progress();
@@ -689,6 +729,17 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
 
                 if let Some(pos) = image_service.find_image_in_window(Some(rect), &catch_path, 0.9)
                 {
+                    // Add detection box for catch button
+                    SHARED_STATE.set_detection_boxes(vec![DetectionBox {
+                        x: pos.0 - 30,
+                        y: pos.1 - 15,
+                        width: 60,
+                        height: 30,
+                        label: "Catch!".to_string(),
+                        confidence: 0.9,
+                        color: "#ff00ff".to_string(),
+                    }]);
+
                     state.update_progress();
                     mouse_move(pos.0, pos.1);
                     thread::sleep(Duration::from_millis(50));
@@ -699,6 +750,9 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
                 thread::sleep(CHECK_INTERVAL);
             }
         }
+
+        // Update detection boxes in shared state
+        SHARED_STATE.set_detection_boxes(detection_boxes);
 
         thread::sleep(CHECK_INTERVAL);
     }

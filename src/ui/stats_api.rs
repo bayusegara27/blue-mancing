@@ -438,6 +438,20 @@ impl StatsApi {
             .unwrap_or(true)
     }
 
+    // Detection boxes (ESP) setting
+    pub fn set_show_detection_boxes(&mut self, value: bool) {
+        self.settings
+            .insert("show_detection_boxes".to_string(), value.to_string());
+        self.save_settings();
+    }
+
+    pub fn get_show_detection_boxes(&self) -> bool {
+        self.settings
+            .get("show_detection_boxes")
+            .map(|s| s == "true")
+            .unwrap_or(false)
+    }
+
     pub fn get_daily_table(&mut self) -> String {
         self.stats.get_all_daily_tables()
     }
@@ -469,6 +483,7 @@ pub struct OverlaySettings {
     pub show_overlay: bool,
     pub show_debug_overlay: bool,
     pub overlay_always_on_top: bool,
+    pub show_detection_boxes: bool,
 }
 
 impl OverlaySettings {
@@ -499,6 +514,10 @@ impl OverlaySettings {
                 .get("overlay_always_on_top")
                 .map(|s| s == "true")
                 .unwrap_or(true),
+            show_detection_boxes: settings
+                .get("show_detection_boxes")
+                .map(|s| s == "true")
+                .unwrap_or(false),
         }
     }
 }

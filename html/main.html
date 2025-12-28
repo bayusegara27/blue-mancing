@@ -1373,6 +1373,12 @@
                                 <i class="fa-solid fa-thumbtack"></i> ON
                             </button>
                         </div>
+                        <div class="field toggle-field">
+                            <label>Detection Boxes (ESP)</label>
+                            <button id="detection-boxes-btn" class="toggle-btn">
+                                <i class="fa-solid fa-vector-square"></i> OFF
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1637,6 +1643,7 @@
         let showOverlay = true;
         let debugOverlayEnabled = true;
         let overlayOnTop = true;
+        let detectionBoxesEnabled = false;
 
         // Function to update toggle button UI
         function updateToggleButton(btn, isEnabled, iconOn, iconOff) {
@@ -1657,12 +1664,14 @@
                     showOverlay = window.__bluemancing_settings.show_overlay !== false;
                     debugOverlayEnabled = window.__bluemancing_settings.show_debug_overlay !== false;
                     overlayOnTop = window.__bluemancing_settings.overlay_always_on_top !== false;
+                    detectionBoxesEnabled = window.__bluemancing_settings.show_detection_boxes === true;
                 }
                 
                 // Update UI to match saved settings
                 const showOverlayBtn = document.getElementById("show-overlay-btn");
                 const debugBtn = document.getElementById("debug-overlay-btn");
                 const ontopBtn = document.getElementById("overlay-ontop-btn");
+                const detectionBoxesBtn = document.getElementById("detection-boxes-btn");
                 
                 updateToggleButton(showOverlayBtn, showOverlay, 
                     '<i class="fa-solid fa-window-maximize"></i>',
@@ -1673,6 +1682,9 @@
                 updateToggleButton(ontopBtn, overlayOnTop,
                     '<i class="fa-solid fa-thumbtack"></i>',
                     '<i class="fa-solid fa-thumbtack"></i>');
+                updateToggleButton(detectionBoxesBtn, detectionBoxesEnabled,
+                    '<i class="fa-solid fa-vector-square"></i>',
+                    '<i class="fa-solid fa-vector-square"></i>');
             } catch (e) {
                 console.warn("Failed to load overlay settings:", e);
             }
@@ -1721,6 +1733,22 @@
                 }
             } catch (e) {
                 console.log("Overlay on top setting stored locally");
+            }
+        });
+
+        // Detection Boxes (ESP) toggle
+        document.getElementById("detection-boxes-btn").addEventListener("click", function() {
+            detectionBoxesEnabled = !detectionBoxesEnabled;
+            updateToggleButton(this, detectionBoxesEnabled,
+                '<i class="fa-solid fa-vector-square"></i>',
+                '<i class="fa-solid fa-vector-square"></i>');
+            // Save setting via API
+            try {
+                if (window.pywebview && window.pywebview.api.set_detection_boxes) {
+                    window.pywebview.api.set_detection_boxes(detectionBoxesEnabled);
+                }
+            } catch (e) {
+                console.log("Detection boxes setting stored locally");
             }
         });
 
