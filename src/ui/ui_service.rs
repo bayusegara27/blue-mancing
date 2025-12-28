@@ -1121,7 +1121,8 @@ fn get_default_esp_overlay_html() -> &'static str {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: 100%; height: 100%;
-      overflow: hidden; background: transparent;
+      overflow: hidden; background-color: rgba(0, 0, 0, 0);
+      background: transparent !important;
       pointer-events: none;
     }
     .detection-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
