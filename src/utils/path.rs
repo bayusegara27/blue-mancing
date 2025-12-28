@@ -17,7 +17,7 @@ pub fn get_data_dir() -> PathBuf {
             }
         }
     }
-    
+
     // Fall back to current working directory
     env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }

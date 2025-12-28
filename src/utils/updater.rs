@@ -2,20 +2,21 @@
 
 #![allow(dead_code)]
 
+use anyhow::{Context, Result};
+use parking_lot::Mutex;
+use serde::Deserialize;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
-use parking_lot::Mutex;
-use serde::Deserialize;
-use anyhow::{Result, Context};
 
 /// Application version - automatically set from VERSION file during build
 pub const APP_VERSION: &str = env!("APP_VERSION");
 
 /// URL to check for updates
-const LATEST_URL: &str = "https://raw.githubusercontent.com/bayusegara27/blue-mancing/main/latest.json";
+const LATEST_URL: &str =
+    "https://raw.githubusercontent.com/bayusegara27/blue-mancing/main/latest.json";
 
 /// Update information
 #[derive(Debug, Clone, Deserialize)]
@@ -39,7 +40,7 @@ impl UpdateApi {
             total_mb: Arc::new(Mutex::new(0.0)),
         }
     }
-    
+
     pub fn set_progress(&self, percent: f32, downloaded: Option<f32>, total: Option<f32>) {
         *self.progress.lock() = percent;
         if let Some(d) = downloaded {
@@ -49,7 +50,7 @@ impl UpdateApi {
             *self.total_mb.lock() = t;
         }
     }
-    
+
     pub fn get_progress(&self) -> (f32, f32, f32) {
         (
             *self.progress.lock(),
@@ -68,8 +69,13 @@ impl Default for UpdateApi {
 /// Check for updates
 pub async fn check_for_update() -> Option<UpdateInfo> {
     let client = reqwest::Client::new();
-    
-    match client.get(LATEST_URL).timeout(std::time::Duration::from_secs(5)).send().await {
+
+    match client
+        .get(LATEST_URL)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+    {
         Ok(response) => {
             if let Ok(latest) = response.json::<UpdateInfo>().await {
                 if latest.version != APP_VERSION {
@@ -81,15 +87,19 @@ pub async fn check_for_update() -> Option<UpdateInfo> {
             tracing::warn!("Failed to check for updates: {}", e);
         }
     }
-    
+
     None
 }
 
 /// Check for updates (blocking version)
 pub fn check_for_update_blocking() -> Option<UpdateInfo> {
     let client = reqwest::blocking::Client::new();
-    
-    match client.get(LATEST_URL).timeout(std::time::Duration::from_secs(5)).send() {
+
+    match client
+        .get(LATEST_URL)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+    {
         Ok(response) => {
             if let Ok(latest) = response.json::<UpdateInfo>() {
                 if latest.version != APP_VERSION {
@@ -101,7 +111,7 @@ pub fn check_for_update_blocking() -> Option<UpdateInfo> {
             tracing::warn!("Failed to check for updates: {}", e);
         }
     }
-    
+
     None
 }
 
@@ -109,30 +119,30 @@ pub fn check_for_update_blocking() -> Option<UpdateInfo> {
 pub async fn download_update(update_info: &UpdateInfo, api: &UpdateApi) -> Result<PathBuf> {
     let temp_dir = std::env::temp_dir();
     let temp_path = temp_dir.join("bpsr_fishing_update.exe");
-    
+
     // Remove existing file if present
     if temp_path.exists() {
         fs::remove_file(&temp_path)?;
     }
-    
+
     let client = reqwest::Client::new();
     let response = client.get(&update_info.url).send().await?;
-    
+
     let total_size = response.content_length().unwrap_or(0);
     let total_mb = total_size as f32 / (1024.0 * 1024.0);
     api.set_progress(0.0, Some(0.0), Some(total_mb));
-    
+
     let mut file = File::create(&temp_path)?;
     let mut downloaded: u64 = 0;
-    
+
     let mut stream = response.bytes_stream();
     use futures_util::StreamExt;
-    
+
     while let Some(chunk_result) = stream.next().await {
         let chunk = chunk_result?;
         file.write_all(&chunk)?;
         downloaded += chunk.len() as u64;
-        
+
         let percent = if total_size > 0 {
             (downloaded as f32 / total_size as f32) * 100.0
         } else {
@@ -141,7 +151,7 @@ pub async fn download_update(update_info: &UpdateInfo, api: &UpdateApi) -> Resul
         let downloaded_mb = downloaded as f32 / (1024.0 * 1024.0);
         api.set_progress(percent, Some(downloaded_mb), Some(total_mb));
     }
-    
+
     Ok(temp_path)
 }
 
@@ -151,7 +161,7 @@ pub fn run_installer(installer_path: &PathBuf) -> Result<()> {
         .args(["/UPDATER", "/S"])
         .spawn()
         .context("Failed to run installer")?;
-    
+
     Ok(())
 }
 

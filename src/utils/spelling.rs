@@ -1,18 +1,18 @@
 //! Spelling corrections for fish names in logs
 
-use std::fs;
-use serde_json::Value;
 use crate::utils::path::get_data_dir;
+use serde_json::Value;
+use std::fs;
 
 /// Fix spelling mistakes in fishing logs
 pub fn fix_spelling() {
     let filename = get_data_dir().join("logs").join("fishing_log.json");
-    
+
     if !filename.exists() {
         tracing::info!("No log file found at {:?}", filename);
         return;
     }
-    
+
     let content = match fs::read_to_string(&filename) {
         Ok(c) => c,
         Err(e) => {
@@ -20,7 +20,7 @@ pub fn fix_spelling() {
             return;
         }
     };
-    
+
     let data: Value = match serde_json::from_str(&content) {
         Ok(d) => d,
         Err(e) => {
@@ -28,9 +28,9 @@ pub fn fix_spelling() {
             return;
         }
     };
-    
+
     let fixed_data = fix_item(data);
-    
+
     if let Ok(output) = serde_json::to_string_pretty(&fixed_data) {
         if let Err(e) = fs::write(&filename, output) {
             tracing::warn!("Failed to write fixed log file: {}", e);
@@ -45,27 +45,26 @@ fn fix_item(item: Value) -> Value {
     match item {
         Value::String(s) => Value::String(correct_text(&s)),
         Value::Array(arr) => Value::Array(arr.into_iter().map(fix_item).collect()),
-        Value::Object(obj) => {
-            Value::Object(obj.into_iter().map(|(k, v)| {
-                let fixed_v = if v.is_string() {
-                    Value::String(correct_text(v.as_str().unwrap()))
-                } else {
-                    fix_item(v)
-                };
-                (k, fixed_v)
-            }).collect())
-        }
+        Value::Object(obj) => Value::Object(
+            obj.into_iter()
+                .map(|(k, v)| {
+                    let fixed_v = if v.is_string() {
+                        Value::String(correct_text(v.as_str().unwrap()))
+                    } else {
+                        fix_item(v)
+                    };
+                    (k, fixed_v)
+                })
+                .collect(),
+        ),
         other => other,
     }
 }
 
 /// Apply spelling corrections to text
 fn correct_text(text: &str) -> String {
-    let corrections = [
-        ("astercad", "asterscad"),
-        ("aluminium", "aluminum"),
-    ];
-    
+    let corrections = [("astercad", "asterscad"), ("aluminium", "aluminum")];
+
     let mut result = text.to_string();
     for (wrong, right) in corrections {
         result = result.replace(wrong, right);

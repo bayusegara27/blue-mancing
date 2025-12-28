@@ -2,10 +2,10 @@
 
 #![allow(dead_code)]
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use parking_lot::RwLock;
 use once_cell::sync::Lazy;
+use parking_lot::RwLock;
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Bot activity status for detailed status display
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -86,12 +86,12 @@ impl SharedBotState {
             detail_message: RwLock::new(String::new()),
         }
     }
-    
+
     /// Check if bot is running
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }
-    
+
     /// Set bot running state
     pub fn set_running(&self, running: bool) {
         self.running.store(running, Ordering::SeqCst);
@@ -101,32 +101,32 @@ impl SharedBotState {
             self.set_activity(BotActivity::Stopped);
         }
     }
-    
+
     /// Get current activity
     pub fn get_activity(&self) -> BotActivity {
         self.activity.read().clone()
     }
-    
+
     /// Set current activity
     pub fn set_activity(&self, activity: BotActivity) {
         *self.activity.write() = activity;
     }
-    
+
     /// Get detailed message
     pub fn get_detail_message(&self) -> String {
         self.detail_message.read().clone()
     }
-    
+
     /// Set detailed message
     pub fn set_detail_message(&self, message: impl Into<String>) {
         *self.detail_message.write() = message.into();
     }
-    
+
     /// Get current stats
     pub fn get_stats(&self) -> SharedStats {
         self.stats.read().clone()
     }
-    
+
     /// Update stats
     pub fn update_stats(&self, catches: i32, misses: i32, xp: i32) {
         let mut stats = self.stats.write();
@@ -140,7 +140,7 @@ impl SharedBotState {
             0.0
         };
     }
-    
+
     /// Increment catches
     pub fn increment_catch(&self, xp_gain: i32) {
         let mut stats = self.stats.write();
@@ -153,7 +153,7 @@ impl SharedBotState {
             0.0
         };
     }
-    
+
     /// Increment misses
     pub fn increment_miss(&self) {
         let mut stats = self.stats.write();
@@ -165,18 +165,18 @@ impl SharedBotState {
             0.0
         };
     }
-    
+
     /// Reset stats for new session
     pub fn reset_stats(&self) {
         *self.stats.write() = SharedStats::default();
     }
-    
+
     /// Get status as JSON string for UI
     pub fn to_json(&self) -> String {
         let stats = self.get_stats();
         let activity = self.get_activity();
         let detail = self.get_detail_message();
-        
+
         serde_json::json!({
             "running": self.is_running(),
             "activity": activity.description(),
@@ -187,7 +187,8 @@ impl SharedBotState {
                 "xp": stats.xp,
                 "rate": format!("{:.2}", stats.rate)
             }
-        }).to_string()
+        })
+        .to_string()
     }
 }
 

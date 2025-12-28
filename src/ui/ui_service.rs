@@ -508,6 +508,7 @@ fn get_overlay_settings_json() -> String {
 #[derive(Debug, Clone)]
 enum UserEvent {
     UpdateOverlay,
+    UpdateDashboard,
 }
 
 /// Start the UI (main entry point)
@@ -563,6 +564,7 @@ pub fn start_ui() {
 
     // Store main webview for evaluating scripts
     let main_webview = Arc::new(parking_lot::Mutex::new(main_webview));
+    let main_webview_clone = main_webview.clone();
 
     register_window(
         Window::Main,
@@ -613,12 +615,24 @@ pub fn start_ui() {
     // Spawn a thread to periodically update the overlay with bot status
     // Using 250ms interval to balance responsiveness and CPU usage
     let proxy_clone = proxy.clone();
+    let proxy_clone2 = proxy.clone();
     thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_millis(250));
 
             // Send update event to main thread
             let _ = proxy_clone.send_event(UserEvent::UpdateOverlay);
+        }
+    });
+
+    // Spawn a thread to periodically update the dashboard data
+    // Using 3 second interval to avoid excessive file reads
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(3));
+
+            // Send dashboard update event to main thread
+            let _ = proxy_clone2.send_event(UserEvent::UpdateDashboard);
         }
     });
 
@@ -653,6 +667,34 @@ pub fn start_ui() {
                 if let Some(webview) = overlay_webview_clone.try_lock() {
                     let _ = webview.evaluate_script(&status_js);
                     let _ = webview.evaluate_script(&settings_js);
+                }
+            }
+            Event::UserEvent(UserEvent::UpdateDashboard) => {
+                // Refresh dashboard data by updating the preloaded variables
+                let daily_data = get_daily_html();
+                let summary_data = get_summary_html();
+
+                // Escape the HTML for safe JavaScript injection
+                let daily_escaped = serde_json::to_string(&daily_data)
+                    .unwrap_or_else(|_| "\"\"".to_string());
+                let summary_escaped = serde_json::to_string(&summary_data)
+                    .unwrap_or_else(|_| "\"\"".to_string());
+
+                // Update the preloaded data and refresh the UI
+                let update_js = format!(
+                    r#"
+                    window.__bluemancing_daily = {};
+                    window.__bluemancing_summary = {};
+                    // Auto-refresh the current page if it's showing daily or summary
+                    if (typeof refreshCurrentPage === 'function') {{
+                        refreshCurrentPage();
+                    }}
+                    "#,
+                    daily_escaped, summary_escaped
+                );
+
+                if let Some(webview) = main_webview_clone.try_lock() {
+                    let _ = webview.evaluate_script(&update_js);
                 }
             }
             Event::WindowEvent {
