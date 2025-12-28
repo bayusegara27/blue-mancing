@@ -33,11 +33,10 @@ jobs:
           # Install OpenCV pre-built binaries
           choco install opencv -y --version=4.10.0
           
-          # Install LLVM for bindgen (required by opencv-rust)
+          # Install LLVM for bindgen
           choco install llvm -y
           
           # Set environment variables for opencv-rust crate
-          # Note: OpenCV 4.10.0 installs to C:\tools\opencv\build with vc16 binaries
           echo "OPENCV_INCLUDE_PATHS=C:\tools\opencv\build\include" >> $env:GITHUB_ENV
           echo "OPENCV_LINK_PATHS=C:\tools\opencv\build\x64\vc16\lib" >> $env:GITHUB_ENV
           echo "OPENCV_LINK_LIBS=opencv_world4100" >> $env:GITHUB_ENV
@@ -59,10 +58,19 @@ jobs:
       - name: Build Release
         run: cargo build --release
 
-      - name: Create dist directory
+      - name: Create Distribution Package
         run: |
+          # Buat folder dist
           New-Item -ItemType Directory -Force -Path dist
+          
+          # 1. Copy Executable Utama
           Copy-Item "target\release\${{ env.APP_NAME }}.exe" -Destination "dist\"
+          
+          # 2. Copy OpenCV DLL (WAJIB ADA AGAR BISA JALAN)
+          Copy-Item "C:\tools\opencv\build\x64\vc16\bin\opencv_world4100.dll" -Destination "dist\"
+          
+          # 3. Zip folder dist menjadi satu file portable
+          Compress-Archive -Path "dist\*" -DestinationPath "${{ env.APP_NAME }}-portable.zip"
 
       - name: Get version
         id: get_version
@@ -79,6 +87,7 @@ jobs:
           choco install nsis -y
 
       - name: Build Installer
+        # Pastikan file 'installer.nsi' Anda sudah diedit untuk menyertakan DLL juga!
         run: |
           & "C:\Program Files (x86)\NSIS\makensis.exe" /DAppVersion=${{ steps.get_version.outputs.VERSION }} installer.nsi
 
@@ -88,11 +97,11 @@ jobs:
           name: windows-installer
           path: ${{ env.APP_NAME }}_${{ steps.get_version.outputs.VERSION }}_x64-Setup.exe
 
-      - name: Upload Executable Artifact
+      - name: Upload Portable Zip Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-executable
-          path: dist/${{ env.APP_NAME }}.exe
+          name: windows-portable-zip
+          path: ${{ env.APP_NAME }}-portable.zip
 
   release:
     needs: build-windows
@@ -112,10 +121,10 @@ jobs:
           name: windows-installer
           path: ./release
 
-      - name: Download Windows Executable
+      - name: Download Windows Portable Zip
         uses: actions/download-artifact@v4
         with:
-          name: windows-executable
+          name: windows-portable-zip
           path: ./release
 
       - name: Get version
@@ -137,6 +146,6 @@ jobs:
           generate_release_notes: true
           files: |
             ./release/${{ env.APP_NAME }}_${{ steps.get_version.outputs.VERSION }}_x64-Setup.exe
-            ./release/${{ env.APP_NAME }}.exe
+            ./release/${{ env.APP_NAME }}-portable.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
