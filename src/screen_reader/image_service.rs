@@ -46,13 +46,15 @@ impl ImageService {
         let data = img.as_raw();
         
         // Create a Mat by copying the data to ensure proper ownership
+        // Step parameter is width * 1 byte per pixel for single-channel grayscale (CV_8UC1)
+        let step = width as usize * 1;  // 1 byte per pixel for 8-bit grayscale
         let mat = unsafe {
             Mat::new_rows_cols_with_data_unsafe(
                 height,
                 width,
                 CV_8UC1,
                 data.as_ptr() as *mut std::ffi::c_void,
-                width as usize,
+                step,
             )?
         };
         
@@ -64,18 +66,18 @@ impl ImageService {
     
     /// Load image as OpenCV Mat in grayscale
     fn load_template_grayscale(path: &Path) -> opencv::Result<Mat> {
-        imgcodecs::imread(
-            path.to_str().unwrap_or(""),
-            imgcodecs::IMREAD_GRAYSCALE,
-        )
+        let path_str = path.to_str().ok_or_else(|| {
+            opencv::Error::new(opencv::core::StsError, "Invalid path: non-UTF8 characters")
+        })?;
+        imgcodecs::imread(path_str, imgcodecs::IMREAD_GRAYSCALE)
     }
     
     /// Load image with alpha channel
     fn load_template_unchanged(path: &Path) -> opencv::Result<Mat> {
-        imgcodecs::imread(
-            path.to_str().unwrap_or(""),
-            imgcodecs::IMREAD_UNCHANGED,
-        )
+        let path_str = path.to_str().ok_or_else(|| {
+            opencv::Error::new(opencv::core::StsError, "Invalid path: non-UTF8 characters")
+        })?;
+        imgcodecs::imread(path_str, imgcodecs::IMREAD_UNCHANGED)
     }
     
     /// Find a single image on the screen within a given window rectangle
@@ -325,14 +327,21 @@ impl ImageService {
                     continue;
                 }
                 
+                // Verify we have at least 4 channels
+                if channels.len() < 4 {
+                    continue;
+                }
+                
                 // Convert BGR to grayscale
                 let mut bgr = Mat::default();
                 let mut gray = Mat::default();
                 
-                // Merge BGR channels (first 3)
-                let bgr_channels = opencv::core::Vector::<Mat>::from_iter(
-                    (0..3).filter_map(|i| channels.get(i).ok())
-                );
+                // Merge BGR channels (first 3) - explicitly get each channel
+                let ch0 = match channels.get(0) { Ok(c) => c, Err(_) => continue };
+                let ch1 = match channels.get(1) { Ok(c) => c, Err(_) => continue };
+                let ch2 = match channels.get(2) { Ok(c) => c, Err(_) => continue };
+                let bgr_channels = opencv::core::Vector::<Mat>::from_iter([ch0, ch1, ch2]);
+                
                 if opencv::core::merge(&bgr_channels, &mut bgr).is_err() {
                     continue;
                 }
