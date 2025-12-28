@@ -118,7 +118,7 @@ impl ScreenService {
             Region::new(x1, y1, w, h)
         };
         
-        self.safe_screenshot(Some(region), 5, Duration::from_secs(2))
+        self.safe_screenshot(Some(region), 3, Duration::from_millis(100))
     }
 }
 
