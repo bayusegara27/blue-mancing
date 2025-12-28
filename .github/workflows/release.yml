@@ -7,13 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.2.1)'
+        description: 'Version to release (e.g., 2.0.0)'
         required: true
-        default: '1.2.1'
+        default: '2.0.0'
 
 env:
   CARGO_TERM_COLOR: always
-  APP_NAME: bpsr-fishing
+  APP_NAME: blue-mancing
 
 jobs:
   build-windows:
@@ -58,10 +58,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist
           
-          # 1. Copy Executable ke dist
+          # 1. Copy Executable to dist
           Copy-Item "target\release\${{ env.APP_NAME }}.exe" -Destination "dist\"
           
-          # 2. Copy DLL ke dist (WAJIB ADA agar NSIS bisa mempackingnya)
+          # 2. Copy DLL to dist (required for NSIS packaging)
           Copy-Item "C:\tools\opencv\build\x64\vc16\bin\opencv_world4100.dll" -Destination "dist\"
 
       - name: Get version
@@ -79,7 +79,6 @@ jobs:
           choco install nsis -y
 
       - name: Build Installer
-        # Script NSIS akan mengambil file EXE dan DLL dari folder 'dist'
         run: |
           & "C:\Program Files (x86)\NSIS\makensis.exe" /DAppVersion=${{ steps.get_version.outputs.VERSION }} installer.nsi
 
@@ -120,7 +119,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', steps.get_version.outputs.VERSION) }}
-          name: BPSR Fishing v${{ steps.get_version.outputs.VERSION }}
+          name: Blue Mancing v${{ steps.get_version.outputs.VERSION }}
           draft: false
           prerelease: false
           generate_release_notes: true

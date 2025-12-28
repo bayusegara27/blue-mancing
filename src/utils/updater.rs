@@ -12,10 +12,10 @@ use serde::Deserialize;
 use anyhow::{Result, Context};
 
 /// Application version
-pub const APP_VERSION: &str = "v1.2.1";
+pub const APP_VERSION: &str = "v2.0.0";
 
 /// URL to check for updates
-const LATEST_URL: &str = "https://raw.githubusercontent.com/rdsp04/bpsr-fishing/main/latest.json";
+const LATEST_URL: &str = "https://raw.githubusercontent.com/bayusegara27/blue-mancing/main/latest.json";
 
 /// Update information
 #[derive(Debug, Clone, Deserialize)]

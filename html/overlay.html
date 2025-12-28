@@ -2,345 +2,454 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Fishing Overlay</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Blue Mancing Overlay</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Viga&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     html, body {
       width: 100%;
       height: 100%;
-      margin: 0;
-      padding: 0;
-      font-family: 'Viga', sans-serif;
+      font-family: 'Inter', sans-serif;
       color: #fff;
       overflow: hidden;
-      background: radial-gradient(circle at 50% 30%, rgba(25, 60, 120, 0.45), rgba(10, 20, 40, 0.9));
-    }
-
-    .background {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      z-index: 0;
-    }
-
-    .wave {
-      position: absolute;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle at 50% 50%, rgba(100, 180, 255, 0.08), transparent 70%);
-      animation: waveMove 12s linear infinite;
-    }
-
-    .wave:nth-child(2) {
-      animation-delay: -6s;
-      background: radial-gradient(circle at 50% 50%, rgba(120, 200, 255, 0.06), transparent 70%);
-    }
-
-    @keyframes waveMove {
-      0% { transform: translate(0, 0) rotate(0deg); }
-      50% { transform: translate(-25%, -10%) rotate(180deg); }
-      100% { transform: translate(0, 0) rotate(360deg); }
-    }
-
-    .light-dot {
-      position: absolute;
-      width: 3px;
-      height: 3px;
-      border-radius: 50%;
-      background: rgba(120, 200, 255, 0.8);
-      animation: floatUp 8s linear infinite;
-      opacity: 0.5;
-    }
-
-    @keyframes floatUp {
-      0% { transform: translateY(100vh) scale(0.8); opacity: 0; }
-      10% { opacity: 0.7; }
-      90% { opacity: 0.7; }
-      100% { transform: translateY(-10vh) scale(1.1); opacity: 0; }
+      background: transparent;
     }
 
     .overlay {
       position: relative;
       z-index: 5;
-      backdrop-filter: blur(14px) saturate(160%);
-      -webkit-backdrop-filter: blur(14px) saturate(160%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 0 25px rgba(0, 90, 180, 0.35);
+      backdrop-filter: blur(12px) saturate(150%);
+      -webkit-backdrop-filter: blur(12px) saturate(150%);
+      border: 1px solid rgba(56, 198, 255, 0.15);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 30px rgba(56, 198, 255, 0.1);
       display: flex;
       flex-direction: column;
-      padding: 12px 16px;
-      width: 360px;
-      min-height: 200px;
-      background: rgba(10, 20, 40, 0.75);
-      border-radius: 14px;
+      padding: 8px 10px;
+      width: 240px;
+      background: linear-gradient(145deg, rgba(15, 25, 45, 0.92), rgba(8, 15, 30, 0.95));
+      border-radius: 12px;
+      transition: all 0.3s ease;
     }
 
+    .overlay.minimized {
+      height: 32px !important;
+      min-height: 32px !important;
+      overflow: hidden;
+    }
+
+    .overlay.minimized .overlay-content {
+      display: none;
+    }
+
+    /* Draggable header */
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
+      padding: 4px 2px;
+      cursor: move;
+      user-select: none;
+      -webkit-app-region: drag;
+    }
+
+    .title-section {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .title-icon {
+      width: 16px;
+      height: 16px;
+      background: linear-gradient(135deg, #38c6ff, #00ff88);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
     }
 
     .title {
-      font-size: 14px;
-      font-weight: bold;
-      color: #38c6ff;
-      text-shadow: 0 0 8px rgba(56, 198, 255, 0.5);
-    }
-
-    .divider {
-      width: 100%;
-      height: 1px;
-      background: rgba(255, 255, 255, 0.1);
-      margin: 8px 0;
-    }
-
-    .control-btn {
-      transition: all 0.25s ease;
-      font-weight: 600;
-      padding: 6px 12px;
       font-size: 11px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-
-    .control-btn:hover {
-      transform: scale(1.05);
-    }
-
-    .btn-start {
-      background: rgba(34, 197, 94, 0.3);
-      border: 1px solid rgba(34, 197, 94, 0.5);
-      color: #4ade80;
-    }
-
-    .btn-start:hover {
-      background: rgba(34, 197, 94, 0.4);
-    }
-
-    .btn-stop {
-      background: rgba(239, 68, 68, 0.3);
-      border: 1px solid rgba(239, 68, 68, 0.5);
-      color: #f87171;
-    }
-
-    .btn-stop:hover {
-      background: rgba(239, 68, 68, 0.4);
+      font-weight: 600;
+      color: #38c6ff;
+      text-shadow: 0 0 8px rgba(56, 198, 255, 0.4);
+      letter-spacing: 0.3px;
     }
 
     .window-controls {
       display: flex;
-      gap: 6px;
+      gap: 4px;
+      -webkit-app-region: no-drag;
     }
 
     .window-btn {
-      background: none;
+      background: rgba(255, 255, 255, 0.05);
       border: none;
-      color: white;
+      color: rgba(255, 255, 255, 0.6);
       cursor: pointer;
-      transition: color 0.25s, transform 0.2s, filter 0.3s;
-      padding: 2px 6px;
+      transition: all 0.2s ease;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 10px;
     }
 
     .window-btn:hover {
-      color: #2c5f9c; filter: drop-shadow(0 0 4px rgba(62, 113, 175, 0.8));
-      transform: scale(1.15);
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
     }
 
+    .window-btn.close:hover {
+      background: rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+
+    .overlay-content {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    /* Controls */
+    .controls-row {
+      display: flex;
+      gap: 4px;
+    }
+
+    .control-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 5px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-start {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(34, 197, 94, 0.15));
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: #4ade80;
+    }
+
+    .btn-start:hover {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.35), rgba(34, 197, 94, 0.25));
+      transform: translateY(-1px);
+    }
+
+    .btn-stop {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(239, 68, 68, 0.15));
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+
+    .btn-stop:hover {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.35), rgba(239, 68, 68, 0.25));
+      transform: translateY(-1px);
+    }
+
+    /* Stats Grid */
     .stats-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 6px;
-      margin-bottom: 10px;
+      gap: 4px;
     }
 
-    .stat-line {
+    .stat-item {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      background: rgba(255, 255, 255, 0.05);
-      padding: 6px 10px;
-      border-radius: 6px;
-      gap: 8px;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 4px 8px;
+      border-radius: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
     }
 
-    .stat-line i {
+    .stat-item i {
+      font-size: 10px;
       width: 14px;
-      text-align: center;
-      transition: 0.3s ease;
     }
 
-    .fa-fish { color: #85d385; filter: drop-shadow(0 0 4px rgba(133, 211, 133, 0.7)); }
-    .fa-wind { color: #60a5fa; filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.8)); }
-    .fa-brain { color: #38bdf8; filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.8)); }
-    .fa-percent { color: #a5f3fc; filter: drop-shadow(0 0 4px rgba(165, 243, 252, 0.7)); }
-    .fa-power-off { color: #d1d5db; filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.3)); }
-    .fa-clock { color: #93c5fd; filter: drop-shadow(0 0 4px rgba(147, 197, 253, 0.8)); }
-
-    .status-section {
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 8px;
-      padding: 10px;
+    .stat-label {
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.5);
+      flex: 1;
+      margin-left: 6px;
     }
 
-    .status-header {
+    .stat-value {
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .stat-value.green { color: #4ade80; }
+    .stat-value.red { color: #f87171; }
+    .stat-value.cyan { color: #22d3ee; }
+    .stat-value.teal { color: #2dd4bf; }
+
+    .fa-fish { color: #4ade80; }
+    .fa-xmark { color: #f87171; }
+    .fa-star { color: #22d3ee; }
+    .fa-percent { color: #2dd4bf; }
+
+    /* Status Bar */
+    .status-bar {
       display: flex;
+      align-items: center;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 6px;
+      padding: 6px 8px;
     }
 
-    .status-indicator {
+    .status-left {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
 
     .status-dot {
-      width: 12px;
-      height: 12px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       background: #ef4444;
-      box-shadow: 0 0 6px #ff3b3b;
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+      transition: all 0.3s ease;
     }
 
     .status-dot.running {
       background: #22c55e;
-      box-shadow: 0 0 6px #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
       animation: pulse 1.5s infinite;
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; box-shadow: 0 0 6px #22c55e; }
-      50% { opacity: 0.7; box-shadow: 0 0 12px #22c55e; }
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.1); }
     }
 
     .status-text {
-      font-size: 13px;
-      font-weight: bold;
-    }
-
-    .status-text.running { color: #4ade80; }
-    .status-text.stopped { color: #f87171; }
-
-    .activity-box {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 6px;
-      padding: 8px 10px;
-      min-height: 40px;
-    }
-
-    .activity-label {
       font-size: 10px;
-      color: #64748b;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-weight: 600;
+      color: #f87171;
     }
 
-    .activity-text {
-      font-size: 12px;
-      color: #94a3b8;
-      line-height: 1.4;
+    .status-text.running {
+      color: #4ade80;
     }
 
     .timer {
-      font-size: 12px;
+      font-size: 10px;
       color: #60a5fa;
-      font-family: monospace;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
     }
 
-</style>
-<body class="flex items-center justify-center w-screen h-screen">
+    /* Activity - collapsible */
+    .activity-section {
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
 
-  <div class="background">
-    <div class="wave"></div>
-    <div class="wave"></div>
-    <div class="light-dot" style="left: 10%; animation-delay: 1s;"></div>
-    <div class="light-dot" style="left: 40%; animation-delay: 3s;"></div>
-    <div class="light-dot" style="left: 70%; animation-delay: 5s;"></div>
-    <div class="light-dot" style="left: 85%; animation-delay: 2s;"></div>
-  </div>
+    .activity-section.hidden {
+      display: none;
+    }
 
-  <!-- Overlay -->
-  <div class="overlay">
-    <!-- Header -->
-    <div class="header">
-      <span class="title">BPSR Fishing Bot</span>
+    .activity-box {
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 5px;
+      padding: 5px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    .activity-label {
+      font-size: 8px;
+      color: rgba(255, 255, 255, 0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .activity-text {
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Debug toggle */
+    .debug-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      margin-top: 4px;
+    }
+
+    .debug-btn {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.3);
+      font-size: 8px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 3px;
+      transition: all 0.2s;
+    }
+
+    .debug-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .debug-btn.active {
+      color: #38c6ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay" id="overlay">
+    <!-- Draggable Header -->
+    <div class="header" id="drag-header">
+      <div class="title-section">
+        <div class="title-icon"><i class="fa-solid fa-fish"></i></div>
+        <span class="title">Blue Mancing</span>
+      </div>
       <div class="window-controls">
-        <button id="minimize-btn" class="window-btn" title="Minimize"><i class="fa-solid fa-minus fa-sm"></i></button>
-        <button id="close-btn" class="window-btn" title="Close"><i class="fa-solid fa-xmark fa-lg"></i></button>
+        <button id="minimize-btn" class="window-btn" title="Minimize"><i class="fa-solid fa-minus"></i></button>
+        <button id="close-btn" class="window-btn close" title="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
     </div>
 
-    <!-- Controls -->
-    <div class="flex gap-2 mb-3">
-      <button id="start-btn" class="control-btn btn-start flex items-center gap-2 flex-1">
-        <i class="fa-solid fa-play"></i>
-        <span>Start</span>
-      </button>
-      <button id="stop-btn" class="control-btn btn-stop flex items-center gap-2 flex-1">
-        <i class="fa-solid fa-stop"></i>
-        <span>Stop</span>
-      </button>
-    </div>
+    <!-- Collapsible Content -->
+    <div class="overlay-content" id="overlay-content">
+      <!-- Controls -->
+      <div class="controls-row">
+        <button id="start-btn" class="control-btn btn-start">
+          <i class="fa-solid fa-play"></i>
+          <span>Start</span>
+        </button>
+        <button id="stop-btn" class="control-btn btn-stop">
+          <i class="fa-solid fa-stop"></i>
+          <span>Stop</span>
+        </button>
+      </div>
 
-    <div class="divider"></div>
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-item">
+          <i class="fa-solid fa-fish"></i>
+          <span class="stat-label">Catches</span>
+          <span id="stat-catches" class="stat-value green">0</span>
+        </div>
+        <div class="stat-item">
+          <i class="fa-solid fa-xmark"></i>
+          <span class="stat-label">Misses</span>
+          <span id="stat-misses" class="stat-value red">0</span>
+        </div>
+        <div class="stat-item">
+          <i class="fa-solid fa-star"></i>
+          <span class="stat-label">XP</span>
+          <span id="stat-xp" class="stat-value cyan">0</span>
+        </div>
+        <div class="stat-item">
+          <i class="fa-solid fa-percent"></i>
+          <span class="stat-label">Rate</span>
+          <span id="stat-rate" class="stat-value teal">0%</span>
+        </div>
+      </div>
 
-    <!-- Stats -->
-    <div class="stats-grid">
-      <div class="stat-line"><i class="fa-solid fa-fish"></i><span class="text-xs text-gray-400">Catches</span><span id="stat-catches" class="text-sm font-bold text-green-400">0</span></div>
-      <div class="stat-line"><i class="fa-solid fa-wind"></i><span class="text-xs text-gray-400">Misses</span><span id="stat-misses" class="text-sm font-bold text-red-400">0</span></div>
-      <div class="stat-line"><i class="fa-solid fa-brain"></i><span class="text-xs text-gray-400">XP</span><span id="stat-xp" class="text-sm font-bold text-cyan-400">0</span></div>
-      <div class="stat-line"><i class="fa-solid fa-percent"></i><span class="text-xs text-gray-400">Rate</span><span id="stat-rate" class="text-sm font-bold text-teal-400">0%</span></div>
-    </div>
-
-    <div class="divider"></div>
-
-    <!-- Status Section -->
-    <div class="status-section">
-      <div class="status-header">
-        <div class="status-indicator">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <div class="status-left">
           <div id="status-dot" class="status-dot"></div>
-          <span id="status-text" class="status-text stopped">Stopped</span>
+          <span id="status-text" class="status-text">Stopped</span>
         </div>
-        <div class="flex items-center gap-2">
-          <i class="fa-solid fa-clock text-sky-400 text-xs"></i>
-          <span id="timer" class="timer">00:00:00</span>
+        <span id="timer" class="timer">00:00:00</span>
+      </div>
+
+      <!-- Debug/Activity Section -->
+      <div class="activity-section" id="activity-section">
+        <div class="activity-box">
+          <div class="activity-label">Activity</div>
+          <div id="activity" class="activity-text">Waiting for start...</div>
         </div>
       </div>
-      
-      <div class="activity-box">
-        <div class="activity-label">Current Activity</div>
-        <div id="activity" class="activity-text">Waiting for start...</div>
+
+      <!-- Debug Toggle -->
+      <div class="debug-toggle">
+        <button id="debug-toggle-btn" class="debug-btn active" title="Toggle debug info">
+          <i class="fa-solid fa-bug"></i> Debug
+        </button>
       </div>
     </div>
   </div>
 
   <script>
+    const overlay = document.getElementById('overlay');
+    const overlayContent = document.getElementById('overlay-content');
     const indicator = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
     const timer = document.getElementById('timer');
     const closeBtn = document.getElementById('close-btn');
     const minimizeBtn = document.getElementById('minimize-btn');
     const activityEl = document.getElementById('activity');
+    const activitySection = document.getElementById('activity-section');
+    const debugToggleBtn = document.getElementById('debug-toggle-btn');
+    const dragHeader = document.getElementById('drag-header');
 
     let startTime = null;
     let elapsedTime = 0;
     let timerInterval = null;
     let botRunning = false;
+    let isMinimized = false;
+    let debugVisible = true;
+
+    // Drag functionality
+    let isDragging = false;
+    let dragStartX, dragStartY;
+
+    dragHeader.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.window-controls')) return;
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      document.body.style.cursor = 'move';
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (!isDragging) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      // For native window dragging, send move request to Rust
+      sendToRust('drag', { dx, dy });
+    });
+
+    document.addEventListener('mouseup', function() {
+      isDragging = false;
+      document.body.style.cursor = '';
+    });
 
     // IPC handler for wry - sends message to Rust backend
-    function sendToRust(action) {
+    function sendToRust(action, data = {}) {
       if (window.ipc) {
-        window.ipc.postMessage(JSON.stringify({ action: action }));
+        window.ipc.postMessage(JSON.stringify({ action: action, ...data }));
       }
     }
 
@@ -420,10 +529,9 @@
       timer.textContent = `${h}:${m}:${s}`;
     }
 
-    // Button click handlers using wry IPC
+    // Button click handlers
     document.getElementById('start-btn').addEventListener('click', function() {
       sendToRust('start');
-      // Optimistic UI update using shared function
       if (!botRunning) {
         const wasRunning = botRunning;
         botRunning = true;
@@ -436,7 +544,6 @@
 
     document.getElementById('stop-btn').addEventListener('click', function() {
       sendToRust('stop');
-      // Optimistic UI update using shared function
       if (botRunning) {
         const wasRunning = botRunning;
         botRunning = false;
@@ -445,15 +552,37 @@
       }
     });
 
+    // Minimize functionality
     minimizeBtn.addEventListener('click', function() {
-      sendToRust('minimize');
+      isMinimized = !isMinimized;
+      if (isMinimized) {
+        overlay.classList.add('minimized');
+        minimizeBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+        minimizeBtn.title = 'Expand';
+      } else {
+        overlay.classList.remove('minimized');
+        minimizeBtn.innerHTML = '<i class="fa-solid fa-minus"></i>';
+        minimizeBtn.title = 'Minimize';
+      }
     });
 
     closeBtn.addEventListener('click', function() {
       sendToRust('close');
     });
 
-    // Legacy pywebview compatibility - map to new IPC
+    // Debug toggle
+    debugToggleBtn.addEventListener('click', function() {
+      debugVisible = !debugVisible;
+      if (debugVisible) {
+        activitySection.classList.remove('hidden');
+        debugToggleBtn.classList.add('active');
+      } else {
+        activitySection.classList.add('hidden');
+        debugToggleBtn.classList.remove('active');
+      }
+    });
+
+    // Legacy pywebview compatibility
     window.pywebview = {
       api: {
         start_script: function() { sendToRust('start'); },

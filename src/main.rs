@@ -1,11 +1,12 @@
-//! BPSR Fishing - Auto fishing bot for Blue Protocol: Star Resonance
+//! Blue Mancing - Auto fishing bot for Blue Protocol: Star Resonance
 //!
-//! A Rust-based automation tool for fishing in Blue Protocol: Star Resonance.
+//! A high-performance Rust-based automation tool for fishing in Blue Protocol: Star Resonance.
 //! Features:
 //! - Screen capture and template matching for game state detection
 //! - Automatic fishing rod casting and fish catching
 //! - Mini-game arrow detection and lane management
 //! - Session statistics tracking
+//! - Compact, draggable overlay UI
 //! - Auto-update support
 
 #![allow(unused_imports)]
@@ -744,9 +745,9 @@ fn main() {
     tracing_subscriber::fmt::init();
     
     tracing::info!("========================================");
-    tracing::info!("BPSR Fishing Bot {} - Starting up", APP_VERSION);
+    tracing::info!("Blue Mancing {} - Starting up", APP_VERSION);
     tracing::info!("========================================");
-    println!("BPSR Fishing Bot {}", APP_VERSION);
+    println!("Blue Mancing {}", APP_VERSION);
     println!("================================");
     
     // Initialize shared state
