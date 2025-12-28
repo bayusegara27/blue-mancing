@@ -718,8 +718,18 @@ fn main() {
         .open(&log_file_path);
 
     // Configure logging with both stdout and file output
+    // Use env-filter to reduce log spam from external crates
     use tracing_subscriber::fmt::format::FmtSpan;
     use tracing_subscriber::prelude::*;
+    use tracing_subscriber::EnvFilter;
+
+    // Log filter configuration:
+    // - Sets default level to 'info'
+    // - Sets verbose external crates to 'warn' to filter out their debug/trace logs
+    const LOG_FILTER: &str = "info,blue_mancing=info,reqwest=warn,hyper=warn,hyper_util=warn,wry=warn,tao=warn,mio=warn,want=warn,rustls=warn";
+
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(LOG_FILTER));
 
     match file_result {
         Ok(file) => {
@@ -731,14 +741,18 @@ fn main() {
             let stdout_layer = tracing_subscriber::fmt::layer().with_span_events(FmtSpan::CLOSE);
 
             tracing_subscriber::registry()
+                .with(env_filter)
                 .with(file_layer)
                 .with(stdout_layer)
                 .init();
 
-            tracing::debug!("[INIT] Debug logging enabled at: {:?}", log_file_path);
+            tracing::info!("[INIT] Logging initialized, file: {:?}", log_file_path);
         }
         Err(e) => {
-            tracing_subscriber::fmt::init();
+            // Fallback: stdout-only logging with same filter
+            tracing_subscriber::fmt()
+                .with_env_filter(EnvFilter::new(LOG_FILTER))
+                .init();
             eprintln!(
                 "[INIT] Failed to create debug log file at {:?}: {}",
                 log_file_path, e
