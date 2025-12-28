@@ -335,12 +335,14 @@ fn post_catch_loop(
                     .join("fish");
                 let mut fish_type: Option<String> = None;
 
-                // Wait a bit for the fish result screen to fully render
-                thread::sleep(Duration::from_millis(500));
+                // Wait a shorter time for the fish result screen to fully render
+                // Reduced from 500ms to 200ms like Python version
+                thread::sleep(Duration::from_millis(200));
 
                 if fish_folder.exists() {
-                    // Detection attempts
-                    let max_attempts = 5;
+                    // Detection attempts (reduced from 5 to 3 like Python)
+                    // With optimized template caching and cropping, detection is much faster
+                    let max_attempts = 3;
                     for attempt in 0..max_attempts {
                         SHARED_STATE.set_detail_message(format!(
                             "Detecting fish (attempt {}/{})...",
@@ -371,7 +373,8 @@ fn post_catch_loop(
                                 break;
                             }
                         }
-                        thread::sleep(Duration::from_millis(500));
+                        // Reduced delay from 500ms to 200ms like Python version
+                        thread::sleep(Duration::from_millis(200));
                     }
                 }
 

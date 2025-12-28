@@ -3,18 +3,48 @@
 #![allow(dead_code)]
 
 use image::GrayImage;
+use once_cell::sync::Lazy;
 use opencv::{
     core::{min_max_loc, no_array, Mat, MatTraitConst, Point, CV_8UC1},
     imgcodecs, imgproc,
     prelude::*,
 };
+use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use super::base::get_resolution_folder;
 use super::screen_service::{Region, ScreenService};
 use crate::utils::path::get_data_dir;
+
+// ========== Fish Detection Crop Region Constants ==========
+// These define the region of the screen where fish results appear
+// Values are ratios of the screen dimensions (0.0 - 1.0)
+
+/// Starting X position for fish detection crop (40% of width)
+const FISH_CROP_X_START: f32 = 0.40;
+/// Starting Y position for fish detection crop (45% of height)
+const FISH_CROP_Y_START: f32 = 0.45;
+/// Width of fish detection crop region (50% of width)
+const FISH_CROP_WIDTH: f32 = 0.50;
+/// Height of fish detection crop region (35% of height)
+const FISH_CROP_HEIGHT: f32 = 0.35;
+/// Minimum crop size in pixels (fallback to full image if smaller)
+const MIN_CROP_SIZE: u32 = 50;
+/// High confidence threshold for early termination
+const HIGH_CONFIDENCE_THRESHOLD: f32 = 0.9;
+
+// ========== Template Cache ==========
+/// Type alias for template cache: resolution -> fish_name -> (template, optional_mask)
+type FishTemplates = HashMap<String, (Mat, Option<Mat>)>;
+type TemplateCache = HashMap<String, Arc<FishTemplates>>;
+
+/// Cache for fish templates to avoid reloading from disk every time
+/// Uses Arc to share templates without cloning large matrices
+static FISH_TEMPLATE_CACHE: Lazy<RwLock<TemplateCache>> = Lazy::new(|| RwLock::new(HashMap::new()));
 
 /// Image service for template matching and fish detection
 pub struct ImageService {
@@ -262,14 +292,16 @@ impl ImageService {
     /// Loads all fish templates from fish folder and matches against the screen
     /// Returns fish_name (normalized) and confidence score
     ///
-    /// This method is more reliable than OCR as it doesn't require Tesseract installation.
-    /// It matches fish images directly against the captured screen region.
+    /// OPTIMIZATION: This method now:
+    /// 1. Crops the image to just the fish result area (like Python's OCR crop region)
+    /// 2. Caches loaded templates to avoid re-loading from disk
+    /// 3. Uses early termination when a high-confidence match is found
     pub fn find_best_matching_fish(
         &self,
         window_rect: Option<(i32, i32, i32, i32)>,
         img: Option<GrayImage>,
     ) -> (Option<String>, f32) {
-        tracing::debug!("[FISH_DETECT] Starting template-based fish detection...");
+        tracing::debug!("[FISH_DETECT] Starting optimized template-based fish detection...");
 
         let img = match img {
             Some(i) => i,
@@ -282,8 +314,44 @@ impl ImageService {
             },
         };
 
-        // Convert to OpenCV Mat
-        let img_mat = match Self::gray_image_to_mat(&img) {
+        // OPTIMIZATION 1: Crop the image to just the fish result region
+        // This is similar to Python's OCR crop approach but for template matching
+        // The fish result typically appears in a specific region of the screen
+        let (h, w) = (img.height(), img.width());
+
+        // Crop area for fish detection using constants defined at module level
+        let crop_x1 = (w as f32 * FISH_CROP_X_START) as u32;
+        let crop_y1 = (h as f32 * FISH_CROP_Y_START) as u32;
+        let crop_w = (w as f32 * FISH_CROP_WIDTH) as u32;
+        let crop_h = (h as f32 * FISH_CROP_HEIGHT) as u32;
+
+        // Ensure crop dimensions are valid
+        let crop_w = crop_w.min(w.saturating_sub(crop_x1));
+        let crop_h = crop_h.min(h.saturating_sub(crop_y1));
+
+        if crop_w < MIN_CROP_SIZE || crop_h < MIN_CROP_SIZE {
+            tracing::debug!("[FISH_DETECT] Cropped region too small, using full image");
+            return self.find_best_matching_fish_full_image(&img);
+        }
+
+        // Crop the image
+        let cropped_img =
+            image::imageops::crop_imm(&img, crop_x1, crop_y1, crop_w, crop_h).to_image();
+
+        tracing::debug!(
+            "[FISH_DETECT] Cropped image from {}x{} to {}x{} (region: {}x{} at ({}, {}))",
+            w,
+            h,
+            cropped_img.width(),
+            cropped_img.height(),
+            crop_w,
+            crop_h,
+            crop_x1,
+            crop_y1
+        );
+
+        // Convert cropped image to OpenCV Mat
+        let img_mat = match Self::gray_image_to_mat(&cropped_img) {
             Ok(m) => m,
             Err(e) => {
                 tracing::debug!("[FISH_DETECT] Failed to convert image to Mat: {:?}", e);
@@ -291,7 +359,7 @@ impl ImageService {
             }
         };
 
-        // Get fish template folder
+        // OPTIMIZATION 2: Load templates from cache or disk
         let fish_folder = self
             .target_images_folder
             .join(&self.resolution_folder)
@@ -302,15 +370,112 @@ impl ImageService {
             return (None, 0.0);
         }
 
-        // Load and match all fish templates
+        // Load templates (from cache if available)
+        let templates = self.load_fish_templates(&fish_folder);
+        if templates.is_empty() {
+            tracing::debug!("[FISH_DETECT] No fish templates loaded");
+            return (None, 0.0);
+        }
+
+        // Match all fish templates
         let mut best_fish: Option<String> = None;
         let mut best_score: f32 = 0.0;
 
-        let entries = match fs::read_dir(&fish_folder) {
+        for (fish_name, (template, mask)) in templates.iter() {
+            // Skip if template is larger than cropped image
+            if template.cols() >= img_mat.cols() || template.rows() >= img_mat.rows() {
+                continue;
+            }
+
+            // Perform template matching with optional mask
+            let mut result = Mat::default();
+            let match_result = match mask {
+                Some(m) => imgproc::match_template(
+                    &img_mat,
+                    template,
+                    &mut result,
+                    imgproc::TM_CCOEFF_NORMED,
+                    m,
+                ),
+                None => imgproc::match_template(
+                    &img_mat,
+                    template,
+                    &mut result,
+                    imgproc::TM_CCOEFF_NORMED,
+                    &no_array(),
+                ),
+            };
+
+            if match_result.is_err() {
+                continue;
+            }
+
+            // Find maximum value
+            let mut max_val = 0.0;
+            if min_max_loc(&result, None, Some(&mut max_val), None, None, &no_array()).is_err() {
+                continue;
+            }
+
+            tracing::trace!(
+                "[FISH_DETECT] Template '{}' score: {:.3}",
+                fish_name,
+                max_val
+            );
+
+            // Update best match if this is better
+            if max_val as f32 > best_score {
+                best_score = max_val as f32;
+                best_fish = Some(fish_name.clone());
+
+                // OPTIMIZATION 3: Early termination for high-confidence matches
+                if best_score > HIGH_CONFIDENCE_THRESHOLD {
+                    tracing::debug!(
+                        "[FISH_DETECT] Early termination - high confidence match: '{}' ({:.3})",
+                        fish_name,
+                        best_score
+                    );
+                    break;
+                }
+            }
+        }
+
+        if let Some(ref fish) = best_fish {
+            tracing::debug!(
+                "[FISH_DETECT] Best match: '{}' with score {:.3}",
+                fish,
+                best_score
+            );
+        } else {
+            tracing::debug!("[FISH_DETECT] No fish template matched");
+        }
+
+        (best_fish, best_score)
+    }
+
+    /// Load fish templates from disk or cache
+    /// Returns Arc-wrapped templates to avoid cloning large matrices
+    fn load_fish_templates(&self, fish_folder: &Path) -> Arc<FishTemplates> {
+        // Check if templates are already cached
+        {
+            let cache = FISH_TEMPLATE_CACHE.read();
+            if let Some(templates) = cache.get(&self.resolution_folder) {
+                tracing::trace!("[FISH_DETECT] Using {} cached templates", templates.len());
+                return templates.clone();
+            }
+        }
+
+        // Load templates from disk
+        tracing::debug!(
+            "[FISH_DETECT] Loading templates from disk: {:?}",
+            fish_folder
+        );
+        let mut templates: FishTemplates = HashMap::new();
+
+        let entries = match fs::read_dir(fish_folder) {
             Ok(e) => e,
             Err(e) => {
                 tracing::debug!("[FISH_DETECT] Failed to read fish folder: {:?}", e);
-                return (None, 0.0);
+                return Arc::new(templates);
             }
         };
 
@@ -327,37 +492,80 @@ impl ImageService {
                 None => continue,
             };
 
-            // Load template with alpha channel support (like Python cv2.IMREAD_UNCHANGED)
+            // Load template with alpha channel support
             let template_img = match Self::load_template_unchanged(&path) {
                 Ok(t) => t,
                 Err(_) => continue,
             };
 
             // Extract grayscale template and optional mask
-            let (template, mask) = match Self::extract_template_and_mask(&template_img) {
-                Some(result) => result,
-                None => continue,
-            };
+            if let Some((template, mask)) = Self::extract_template_and_mask(&template_img) {
+                templates.insert(fish_name, (template, mask));
+            }
+        }
 
-            // Skip if template is larger than image
+        // Wrap in Arc for efficient sharing
+        let templates_arc = Arc::new(templates);
+
+        // Cache the templates
+        {
+            let mut cache = FISH_TEMPLATE_CACHE.write();
+            cache.insert(self.resolution_folder.clone(), templates_arc.clone());
+        }
+
+        tracing::debug!(
+            "[FISH_DETECT] Loaded and cached {} templates",
+            templates_arc.len()
+        );
+        templates_arc
+    }
+
+    /// Fallback: Match against full image (used when crop region is too small)
+    fn find_best_matching_fish_full_image(&self, img: &GrayImage) -> (Option<String>, f32) {
+        tracing::debug!("[FISH_DETECT] Using full image matching (fallback)");
+
+        // Convert to OpenCV Mat
+        let img_mat = match Self::gray_image_to_mat(img) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::debug!("[FISH_DETECT] Failed to convert image to Mat: {:?}", e);
+                return (None, 0.0);
+            }
+        };
+
+        // Get fish template folder
+        let fish_folder = self
+            .target_images_folder
+            .join(&self.resolution_folder)
+            .join("fish");
+
+        if !fish_folder.exists() {
+            return (None, 0.0);
+        }
+
+        // Load templates from cache
+        let templates = self.load_fish_templates(&fish_folder);
+
+        let mut best_fish: Option<String> = None;
+        let mut best_score: f32 = 0.0;
+
+        for (fish_name, (template, mask)) in templates.iter() {
             if template.cols() >= img_mat.cols() || template.rows() >= img_mat.rows() {
                 continue;
             }
 
-            // Perform template matching with optional mask
-            // Like Python: res = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
             let mut result = Mat::default();
-            let match_result = match &mask {
+            let match_result = match mask {
                 Some(m) => imgproc::match_template(
                     &img_mat,
-                    &template,
+                    template,
                     &mut result,
                     imgproc::TM_CCOEFF_NORMED,
                     m,
                 ),
                 None => imgproc::match_template(
                     &img_mat,
-                    &template,
+                    template,
                     &mut result,
                     imgproc::TM_CCOEFF_NORMED,
                     &no_array(),
@@ -368,34 +576,19 @@ impl ImageService {
                 continue;
             }
 
-            // Find maximum value
-            // Like Python: _, max_val, _, _ = cv2.minMaxLoc(res)
             let mut max_val = 0.0;
             if min_max_loc(&result, None, Some(&mut max_val), None, None, &no_array()).is_err() {
                 continue;
             }
 
-            tracing::trace!(
-                "[FISH_DETECT] Template '{}' score: {:.3}",
-                fish_name,
-                max_val
-            );
-
-            // Update best match if this is better
             if max_val as f32 > best_score {
                 best_score = max_val as f32;
-                best_fish = Some(fish_name);
-            }
-        }
+                best_fish = Some(fish_name.clone());
 
-        if let Some(ref fish) = best_fish {
-            tracing::debug!(
-                "[FISH_DETECT] Best match: '{}' with score {:.3}",
-                fish,
-                best_score
-            );
-        } else {
-            tracing::debug!("[FISH_DETECT] No fish template matched");
+                if best_score > HIGH_CONFIDENCE_THRESHOLD {
+                    break;
+                }
+            }
         }
 
         (best_fish, best_score)
