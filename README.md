@@ -2,9 +2,9 @@
 
 A fishing automation tool for Blue Protocol: Star Resonance, built with Rust.
 
-[![GitHub](https://img.shields.io/github/downloads/rdsp04/bpsr-fishing/total?style=for-the-badge&color=%23ff9800)](https://github.com/bayusegara27/blue-mancing/releases/latest)
+[![GitHub](https://img.shields.io/github/downloads/bayusegara27/blue-mancing/total?style=for-the-badge&color=%23ff9800)](https://github.com/bayusegara27/blue-mancing/releases/latest)
 
-[![GitHub](https://img.shields.io/github/v/release/rdsp04/bpsr-fishing?style=flat)](https://github.com/bayusegara27/blue-mancing/releases)
+[![GitHub](https://img.shields.io/github/v/release/bayusegara27/blue-mancing?style=flat)](https://github.com/bayusegara27/blue-mancing/releases)
 
 ## About
 
