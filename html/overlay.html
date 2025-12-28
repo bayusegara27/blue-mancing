@@ -427,6 +427,7 @@
 
     dragHeader.addEventListener('mousedown', function(e) {
       if (e.target.closest('.window-controls')) return;
+      e.preventDefault();
       isDragging = true;
       dragStartX = e.clientX;
       dragStartY = e.clientY;
@@ -435,6 +436,7 @@
 
     document.addEventListener('mousemove', function(e) {
       if (!isDragging) return;
+      e.preventDefault();
       const dx = e.clientX - dragStartX;
       const dy = e.clientY - dragStartY;
       // For native window dragging, send move request to Rust
