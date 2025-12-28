@@ -351,8 +351,8 @@ fn post_catch_loop(
                                 );
                             }
 
-                            // Accept detection with score >= 0.5
-                            if score >= 0.5 {
+                            // Accept detection with score >= 0.7 (like Python version)
+                            if score >= 0.7 {
                                 println!("Detected fish: {} (score: {:.3})", ft, score);
                                 SHARED_STATE.set_detail_message(format!(
                                     "Caught: {} ({:.0}% match)",

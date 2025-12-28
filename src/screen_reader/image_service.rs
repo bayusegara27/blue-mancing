@@ -1,14 +1,13 @@
-//! Image processing service for template matching and OCR
+//! Image processing service for template matching and fish detection
 
 #![allow(dead_code)]
 
 use image::GrayImage;
 use opencv::{
-    core::{min_max_loc, no_array, Mat, MatTraitConst, Point, Scalar, CV_32FC1, CV_8UC1},
+    core::{min_max_loc, no_array, Mat, MatTraitConst, Point, CV_8UC1},
     imgcodecs, imgproc,
     prelude::*,
 };
-use rusty_tesseract::{Args, Image as TessImage};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -16,11 +15,6 @@ use std::time::Duration;
 use super::base::get_resolution_folder;
 use super::screen_service::{Region, ScreenService};
 use crate::utils::path::get_data_dir;
-
-/// Default confidence value when OCR successfully detects text.
-/// This value is used because Tesseract doesn't provide per-word confidence easily,
-/// and 0.8 represents a reasonable confidence for successful text detection.
-const DEFAULT_OCR_CONFIDENCE: f32 = 0.8;
 
 /// Image service for template matching and fish detection
 pub struct ImageService {
@@ -205,15 +199,18 @@ impl ImageService {
         Some(screenshot.to_luma8())
     }
 
-    /// Find best matching fish using OCR (like Python version)
-    /// Crops the fish name region and uses Tesseract OCR to read the text
-    /// Returns fish_name (normalized) and confidence
+    /// Find best matching fish using template matching (like Python detect_fish.py)
+    /// Loads all fish templates from fish folder and matches against the screen
+    /// Returns fish_name (normalized) and confidence score
+    ///
+    /// This method is more reliable than OCR as it doesn't require Tesseract installation.
+    /// It matches fish images directly against the captured screen region.
     pub fn find_best_matching_fish(
         &self,
         window_rect: Option<(i32, i32, i32, i32)>,
         img: Option<GrayImage>,
     ) -> (Option<String>, f32) {
-        tracing::debug!("[FISH_DETECT] Starting OCR-based fish detection...");
+        tracing::debug!("[FISH_DETECT] Starting template-based fish detection...");
 
         let img = match img {
             Some(i) => i,
@@ -226,87 +223,186 @@ impl ImageService {
             },
         };
 
-        let (h, w) = (img.height(), img.width());
-        tracing::trace!("[FISH_DETECT] Image size: {}x{}", w, h);
-
-        // Crop area for fish name - EXACTLY like Python version
-        // Python: crop_x1 = int(w * 0.56), crop_y1 = int(h * 0.66)
-        //         crop_x2 = crop_x1 + int(w * 0.30), crop_y2 = crop_y1 + int(h * 0.08)
-        let crop_x1 = (w as f32 * 0.56) as u32;
-        let crop_y1 = (h as f32 * 0.66) as u32;
-        let crop_w = (w as f32 * 0.30) as u32;
-        let crop_h = (h as f32 * 0.08) as u32;
-
-        tracing::trace!(
-            "[FISH_DETECT] OCR crop region: x={}, y={}, w={}, h={}",
-            crop_x1,
-            crop_y1,
-            crop_w,
-            crop_h
-        );
-
-        // Ensure crop region is within bounds
-        if crop_x1 + crop_w > w || crop_y1 + crop_h > h {
-            tracing::debug!("[FISH_DETECT] Crop region out of bounds");
-            return (None, 0.0);
-        }
-
-        let crop = image::imageops::crop_imm(&img, crop_x1, crop_y1, crop_w, crop_h).to_image();
-
-        // Convert GrayImage to DynamicImage for Tesseract
-        let dynamic_img = image::DynamicImage::ImageLuma8(crop);
-
-        // Run OCR using Tesseract (similar to Python's EasyOCR)
-        let tess_image = match TessImage::from_dynamic_image(&dynamic_img) {
-            Ok(img) => img,
+        // Convert to OpenCV Mat
+        let img_mat = match Self::gray_image_to_mat(&img) {
+            Ok(m) => m,
             Err(e) => {
-                tracing::debug!("[FISH_DETECT] Failed to create Tesseract image: {:?}", e);
+                tracing::debug!("[FISH_DETECT] Failed to convert image to Mat: {:?}", e);
                 return (None, 0.0);
             }
         };
 
-        // Configure Tesseract args for English text recognition
-        let args = Args {
-            lang: "eng".to_string(),
-            config_variables: std::collections::HashMap::new(),
-            dpi: Some(150),
-            psm: Some(7), // Single line mode - best for fish names
-            oem: Some(3), // Default OCR Engine Mode
-        };
+        // Get fish template folder
+        let fish_folder = self
+            .target_images_folder
+            .join(&self.resolution_folder)
+            .join("fish");
 
-        // Perform OCR
-        let ocr_result = match rusty_tesseract::image_to_string(&tess_image, &args) {
-            Ok(text) => text,
+        if !fish_folder.exists() {
+            tracing::debug!("[FISH_DETECT] Fish folder not found: {:?}", fish_folder);
+            return (None, 0.0);
+        }
+
+        // Load and match all fish templates
+        let mut best_fish: Option<String> = None;
+        let mut best_score: f32 = 0.0;
+
+        let entries = match fs::read_dir(&fish_folder) {
+            Ok(e) => e,
             Err(e) => {
-                tracing::debug!("[FISH_DETECT] OCR failed: {:?}", e);
+                tracing::debug!("[FISH_DETECT] Failed to read fish folder: {:?}", e);
                 return (None, 0.0);
             }
         };
 
-        let text = ocr_result.trim();
-        if text.is_empty() {
-            tracing::debug!("[FISH_DETECT] OCR returned empty text");
-            return (None, 0.0);
+        for entry in entries.flatten() {
+            let path = entry.path();
+
+            // Only process PNG files
+            if path.extension().map(|e| e != "png").unwrap_or(true) {
+                continue;
+            }
+
+            let fish_name = match path.file_stem().and_then(|s| s.to_str()) {
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+
+            // Load template with alpha channel support (like Python cv2.IMREAD_UNCHANGED)
+            let template_img = match Self::load_template_unchanged(&path) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+
+            if template_img.empty() {
+                continue;
+            }
+
+            // Handle alpha channel if present (4-channel image)
+            let (template, mask): (Mat, Option<Mat>) = if template_img.channels() == 4 {
+                // Extract BGR and alpha channel
+                let mut channels = opencv::core::Vector::<Mat>::new();
+                if opencv::core::split(&template_img, &mut channels).is_err() {
+                    continue;
+                }
+
+                if channels.len() < 4 {
+                    continue;
+                }
+
+                // Convert BGR to grayscale
+                let mut bgr = Mat::default();
+                let mut gray = Mat::default();
+
+                let ch0 = match channels.get(0) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let ch1 = match channels.get(1) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let ch2 = match channels.get(2) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let bgr_channels = opencv::core::Vector::<Mat>::from_iter([ch0, ch1, ch2]);
+
+                if opencv::core::merge(&bgr_channels, &mut bgr).is_err() {
+                    continue;
+                }
+
+                if imgproc::cvt_color(&bgr, &mut gray, imgproc::COLOR_BGR2GRAY, 0).is_err() {
+                    continue;
+                }
+
+                // Create mask from alpha channel (alpha > 0)
+                // Like Python: mask = cv2.threshold(alpha, 1, 255, cv2.THRESH_BINARY)[1]
+                let alpha = match channels.get(3) {
+                    Ok(a) => a,
+                    Err(_) => continue,
+                };
+                let mut mask = Mat::default();
+                if imgproc::threshold(&alpha, &mut mask, 1.0, 255.0, imgproc::THRESH_BINARY)
+                    .is_err()
+                {
+                    continue;
+                }
+
+                (gray, Some(mask))
+            } else if template_img.channels() == 3 {
+                // Convert BGR to grayscale
+                let mut gray = Mat::default();
+                if imgproc::cvt_color(&template_img, &mut gray, imgproc::COLOR_BGR2GRAY, 0).is_err()
+                {
+                    continue;
+                }
+                (gray, None)
+            } else {
+                // Already grayscale
+                (template_img, None)
+            };
+
+            // Skip if template is larger than image
+            if template.cols() >= img_mat.cols() || template.rows() >= img_mat.rows() {
+                continue;
+            }
+
+            // Perform template matching with optional mask
+            // Like Python: res = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
+            let mut result = Mat::default();
+            let match_result = match &mask {
+                Some(m) => imgproc::match_template(
+                    &img_mat,
+                    &template,
+                    &mut result,
+                    imgproc::TM_CCOEFF_NORMED,
+                    m,
+                ),
+                None => imgproc::match_template(
+                    &img_mat,
+                    &template,
+                    &mut result,
+                    imgproc::TM_CCOEFF_NORMED,
+                    &no_array(),
+                ),
+            };
+
+            if match_result.is_err() {
+                continue;
+            }
+
+            // Find maximum value
+            // Like Python: _, max_val, _, _ = cv2.minMaxLoc(res)
+            let mut max_val = 0.0;
+            if min_max_loc(&result, None, Some(&mut max_val), None, None, &no_array()).is_err() {
+                continue;
+            }
+
+            tracing::trace!(
+                "[FISH_DETECT] Template '{}' score: {:.3}",
+                fish_name,
+                max_val
+            );
+
+            // Update best match if this is better
+            if max_val as f32 > best_score {
+                best_score = max_val as f32;
+                best_fish = Some(fish_name);
+            }
         }
 
-        // Normalize the text exactly like Python version:
-        // fish_name = best_text.replace(" ", "_").replace("#", "").lower()
-        let fish_name = text.replace(" ", "_").replace("#", "").to_lowercase();
-
-        tracing::debug!(
-            "[FISH_DETECT] OCR detected: '{}' -> normalized: '{}'",
-            text,
-            fish_name
-        );
-
-        // Use the named constant for confidence when text is detected
-        let confidence = if !fish_name.is_empty() {
-            DEFAULT_OCR_CONFIDENCE
+        if let Some(ref fish) = best_fish {
+            tracing::debug!(
+                "[FISH_DETECT] Best match: '{}' with score {:.3}",
+                fish,
+                best_score
+            );
         } else {
-            0.0
-        };
+            tracing::debug!("[FISH_DETECT] No fish template matched");
+        }
 
-        (Some(fish_name), confidence)
+        (best_fish, best_score)
     }
 
     /// Detect arrows in minigame
