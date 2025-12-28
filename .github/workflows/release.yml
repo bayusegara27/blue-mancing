@@ -28,6 +28,21 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Install OpenCV
+        run: |
+          # Install OpenCV pre-built binaries
+          choco install opencv -y --version=4.10.0
+          
+          # Install LLVM for bindgen (required by opencv-rust)
+          choco install llvm -y
+          
+          # Set environment variables for opencv-rust crate
+          # Note: OpenCV 4.10.0 installs to C:\tools\opencv\build with vc16 binaries
+          echo "OPENCV_INCLUDE_PATHS=C:\tools\opencv\build\include" >> $env:GITHUB_ENV
+          echo "OPENCV_LINK_PATHS=C:\tools\opencv\build\x64\vc16\lib" >> $env:GITHUB_ENV
+          echo "OPENCV_LINK_LIBS=opencv_world4100" >> $env:GITHUB_ENV
+          echo "C:\tools\opencv\build\x64\vc16\bin" >> $env:GITHUB_PATH
+
       - name: Cache Cargo
         uses: actions/cache@v4
         with:
