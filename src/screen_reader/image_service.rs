@@ -23,14 +23,16 @@ use crate::utils::path::get_data_dir;
 // ========== Fish Detection Crop Region Constants ==========
 // These define the region of the screen where fish results appear
 // Values are ratios of the screen dimensions (0.0 - 1.0)
+// The crop region starts at (FISH_CROP_X_START, FISH_CROP_Y_START) and has
+// dimensions (FISH_CROP_WIDTH x FISH_CROP_HEIGHT) as ratios of screen size.
 
-/// Starting X position for fish detection crop (40% of width)
+/// Starting X position for fish detection crop (ratio of screen width)
 const FISH_CROP_X_START: f32 = 0.40;
-/// Starting Y position for fish detection crop (45% of height)
+/// Starting Y position for fish detection crop (ratio of screen height)
 const FISH_CROP_Y_START: f32 = 0.45;
-/// Width of fish detection crop region (50% of width)
+/// Width of fish detection crop region (ratio of screen width)
 const FISH_CROP_WIDTH: f32 = 0.50;
-/// Height of fish detection crop region (35% of height)
+/// Height of fish detection crop region (ratio of screen height)
 const FISH_CROP_HEIGHT: f32 = 0.35;
 /// Minimum crop size in pixels (fallback to full image if smaller)
 const MIN_CROP_SIZE: u32 = 50;
@@ -325,9 +327,11 @@ impl ImageService {
         let crop_w = (w as f32 * FISH_CROP_WIDTH) as u32;
         let crop_h = (h as f32 * FISH_CROP_HEIGHT) as u32;
 
-        // Ensure crop dimensions are valid
-        let crop_w = crop_w.min(w.saturating_sub(crop_x1));
-        let crop_h = crop_h.min(h.saturating_sub(crop_y1));
+        // Ensure crop region doesn't exceed image boundaries
+        let max_crop_w = w.saturating_sub(crop_x1);
+        let max_crop_h = h.saturating_sub(crop_y1);
+        let crop_w = crop_w.min(max_crop_w);
+        let crop_h = crop_h.min(max_crop_h);
 
         if crop_w < MIN_CROP_SIZE || crop_h < MIN_CROP_SIZE {
             tracing::debug!("[FISH_DETECT] Cropped region too small, using full image");
