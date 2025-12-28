@@ -199,45 +199,44 @@ impl ImageService {
         Some(screenshot.to_luma8())
     }
 
-    /// Find best matching fish using OCR-like detection
+    /// Find best matching fish using template matching
+    /// Crop region aligned with Python version for accurate detection
     /// Returns fish_name and confidence
     pub fn find_best_matching_fish(
         &self,
         window_rect: Option<(i32, i32, i32, i32)>,
         img: Option<GrayImage>,
     ) -> (Option<String>, f32) {
-        tracing::info!("[FISH_DETECT] Starting fish detection...");
+        tracing::debug!("[FISH_DETECT] Starting fish detection...");
 
         let img = match img {
             Some(i) => i,
             None => match self.capture_window(window_rect, None) {
                 Some(i) => i,
                 None => {
-                    tracing::warn!("[FISH_DETECT] Failed to capture window for fish detection");
+                    tracing::debug!("[FISH_DETECT] Failed to capture window for fish detection");
                     return (None, 0.0);
                 }
             },
         };
 
         let (h, w) = (img.height(), img.width());
-        tracing::debug!("[FISH_DETECT] Image size: {}x{}", w, h);
+        tracing::trace!("[FISH_DETECT] Image size: {}x{}", w, h);
 
-        // Crop area for fish image detection - centered on the fish result display area
-        // The fish image appears in the right side of the screen after catching
-        // Using a larger region to accommodate full fish images (~300-400px wide, ~200-300px tall)
+        // Crop area for fish detection - optimized region for template matching
+        // Python OCR version uses: crop_x1 = w * 0.56, crop_y1 = h * 0.66, width = w * 0.30, height = h * 0.08
+        // We use a larger region since template matching needs more area than OCR text detection
         let crop_x1 = (w as f32 * 0.50) as u32; // Start from 50% of screen width
-        let crop_y1 = (h as f32 * 0.35) as u32; // Start from 35% of screen height
-        let crop_w = (w as f32 * 0.45) as u32; // 45% of screen width
-        let crop_h = (h as f32 * 0.45) as u32; // 45% of screen height
+        let crop_y1 = (h as f32 * 0.50) as u32; // Start from 50% of screen height
+        let crop_w = (w as f32 * 0.40) as u32; // 40% of screen width
+        let crop_h = (h as f32 * 0.35) as u32; // 35% of screen height
 
-        tracing::info!(
-            "[FISH_DETECT] Crop region: x={}, y={}, w={}, h={} (image: {}x{})",
+        tracing::trace!(
+            "[FISH_DETECT] Crop region: x={}, y={}, w={}, h={}",
             crop_x1,
             crop_y1,
             crop_w,
-            crop_h,
-            w,
-            h
+            crop_h
         );
 
         let crop = image::imageops::crop_imm(&img, crop_x1, crop_y1, crop_w, crop_h).to_image();
@@ -246,7 +245,7 @@ impl ImageService {
         let crop_mat = match Self::gray_image_to_mat(&crop) {
             Ok(m) => m,
             Err(e) => {
-                tracing::error!("[FISH_DETECT] Failed to convert crop to Mat: {:?}", e);
+                tracing::debug!("[FISH_DETECT] Failed to convert crop to Mat: {:?}", e);
                 return (None, 0.0);
             }
         };
@@ -257,33 +256,17 @@ impl ImageService {
             .join("fish");
 
         if !fish_folder.exists() {
-            tracing::error!(
+            tracing::warn!(
                 "[FISH_DETECT] Fish folder does not exist: {:?}",
                 fish_folder
             );
             return (None, 0.0);
         }
 
-        tracing::info!(
-            "[FISH_DETECT] OpenCV template matching using fish templates from: {:?}",
-            fish_folder
-        );
-        tracing::info!(
-            "[FISH_DETECT] NOTE: Detection uses template images (PNG files), fish_config.json is used for XP values and validation"
-        );
-
         let mut best_fish: Option<String> = None;
         let mut best_score = 0.0f32;
         let mut template_count = 0;
         let mut skipped_count = 0;
-        let mut top_matches: Vec<(String, f32)> = Vec::new();
-
-        // Log crop mat dimensions once
-        tracing::debug!(
-            "[FISH_DETECT] Crop mat dimensions: {}x{}",
-            crop_mat.cols(),
-            crop_mat.rows()
-        );
 
         if let Ok(entries) = fs::read_dir(&fish_folder) {
             for entry in entries.flatten() {
@@ -302,36 +285,20 @@ impl ImageService {
                 // Load template with OpenCV
                 let template = match Self::load_template_grayscale(&path) {
                     Ok(t) => t,
-                    Err(e) => {
-                        tracing::debug!(
-                            "[FISH_DETECT] Failed to load template '{}': {:?}",
-                            template_name,
-                            e
-                        );
-                        continue;
-                    }
+                    Err(_) => continue,
                 };
 
                 if template.empty() {
-                    tracing::debug!("[FISH_DETECT] Template '{}' is empty", template_name);
                     continue;
                 }
 
                 // Skip if template is larger than crop
                 if template.cols() >= crop_mat.cols() || template.rows() >= crop_mat.rows() {
-                    tracing::debug!(
-                        "[FISH_DETECT] Template '{}' too large ({}x{}) for crop ({}x{}), skipping",
-                        template_name,
-                        template.cols(),
-                        template.rows(),
-                        crop_mat.cols(),
-                        crop_mat.rows()
-                    );
                     skipped_count += 1;
                     continue;
                 }
 
-                // Perform template matching using TM_CCOEFF_NORMED
+                // Perform template matching using TM_CCOEFF_NORMED (same as Python cv2.TM_CCOEFF_NORMED)
                 let mut result = Mat::default();
                 if imgproc::match_template(
                     &crop_mat,
@@ -354,11 +321,6 @@ impl ImageService {
 
                 let score = max_val as f32;
 
-                // Track top matches for debugging - lower threshold to see more matches
-                if score > 0.3 {
-                    top_matches.push((template_name.clone(), score));
-                }
-
                 if score > best_score {
                     best_score = score;
                     best_fish = Some(template_name);
@@ -366,17 +328,8 @@ impl ImageService {
             }
         }
 
-        // Sort and log top matches for debugging
-        top_matches.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        if !top_matches.is_empty() {
-            let top_5: Vec<_> = top_matches.iter().take(5).collect();
-            tracing::info!("[FISH_DETECT] Top matches: {:?}", top_5);
-        } else {
-            tracing::warn!("[FISH_DETECT] No matches found above threshold 0.3");
-        }
-
-        tracing::info!(
-            "[FISH_DETECT] Scanned {} templates ({} skipped as too large), best match: {:?} (score: {:.3})",
+        tracing::debug!(
+            "[FISH_DETECT] Scanned {} templates ({} skipped), best: {:?} (score: {:.3})",
             template_count,
             skipped_count,
             best_fish,
@@ -389,17 +342,16 @@ impl ImageService {
         // - Converted to lowercase for consistent matching
         if let Some(ref name) = best_fish {
             let normalized = name.replace(" ", "_").replace("#", "").to_lowercase();
-            tracing::info!(
-                "[FISH_DETECT] Detected fish: '{}' (normalized: '{}') with score {:.3}",
+            tracing::debug!(
+                "[FISH_DETECT] Detected: '{}' (normalized: '{}') score={:.3}",
                 name,
                 normalized,
                 best_score
             );
-            println!("[FISH] Detected: {} (score: {:.3})", normalized, best_score);
             return (Some(normalized), best_score);
         }
 
-        tracing::warn!(
+        tracing::debug!(
             "[FISH_DETECT] No fish detected (best score: {:.3})",
             best_score
         );
