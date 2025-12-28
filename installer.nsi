@@ -3,7 +3,6 @@
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 
-
 ;----------------
 ; App Settings
 ;----------------
@@ -17,6 +16,7 @@ UninstallIcon "icons/icon.ico"
   !define AppVersion "1.2.1"
 !endif
 !define AppExecutable "bpsr-fishing.exe"
+!define AppDLL "opencv_world4100.dll" ; [EDIT] Definisi nama DLL
 !define InstallerFile "${AppName}_${AppVersion}_x64-Setup.exe"
 !define LicenseFile "LICENSE"
 !define UninstallRegKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\${AppId}"
@@ -40,6 +40,7 @@ Var SkipDir
 Var IS_UPDATER
 
 !insertmacro GetParameters
+
 ;----------------
 ; Initialization
 ;----------------
@@ -53,7 +54,6 @@ Function CreateSelectedShortcuts
   StrCmp $CreateDesktop ${BST_CHECKED} 0 +3
     CreateShortcut "$DESKTOP\${AppName}.lnk" "$INSTDIR\${AppExecutable}" "" "$INSTDIR\icons\icon.ico"
 FunctionEnd
-
 
 Function PageFinishShortcuts
   nsDialogs::Create 1018
@@ -101,8 +101,6 @@ Function HasSubstring
 FunctionEnd
 
 Function .onInit
-
-
   ; Default flags
   StrCpy $IS_UPDATER "0"
   StrCpy $isUpdate "0"
@@ -177,7 +175,7 @@ Page custom PageFinishShortcuts PageLeaveFinishShortcuts
 ; Installation Section
 ;----------------
 Section "Install"
-    nsExec::ExecToStack 'taskkill /F /IM "${AppExecutable}"'
+  nsExec::ExecToStack 'taskkill /F /IM "${AppExecutable}"'
 
   SetOutPath "$INSTDIR"
 
@@ -192,6 +190,7 @@ Section "Install"
 
     RMDir /r "$INSTDIR\config"
     Delete "$INSTDIR\${AppExecutable}"
+    Delete "$INSTDIR\${AppDLL}" ; [EDIT] Hapus DLL lama saat update
 
     ; Keep logs/screenshots
   ${Else}
@@ -201,11 +200,14 @@ Section "Install"
 
   ; Copy files
   File "dist\${AppExecutable}"
+  
+  ; [PENTING] Copy DLL OpenCV agar program bisa jalan
+  File "dist\${AppDLL}" 
+
   File /r "images"
   File /r "config"
   File /r "html"
   File /r "icons"
-
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
@@ -215,9 +217,7 @@ Section "Install"
   WriteRegStr HKCU "${UninstallRegKey}" "UninstallString" "$INSTDIR\uninstall.exe"
 
   ${If} $IS_UPDATER == "0"
-
-
-    nsExec::ExecToLog 'cmd /C start "" "$INSTDIR\${AppExecutable}"'
+    ; Tidak perlu autostart disini karena sudah ada di FINISHPAGE_RUN
   ${EndIf}
 SectionEnd
 
@@ -229,11 +229,14 @@ Section "Uninstall"
 
     ; Delete main executable and folders
     Delete "$INSTDIR\${AppExecutable}"
+    Delete "$INSTDIR\${AppDLL}" ; [EDIT] Hapus DLL saat uninstall
+    
     RMDir /r "$INSTDIR\images"
     RMDir /r "$INSTDIR\config"
     RMDir /r "$INSTDIR\html"
     RMDir /r "$INSTDIR\logs"
     RMDir /r "$INSTDIR\screenshots"
+    RMDir /r "$INSTDIR\icons" ; [EDIT] Pastikan icons juga terhapus
 
     ; Remove Start Menu shortcut and folder
     Delete "$SMPROGRAMS\${AppName}\${AppName}.lnk"
