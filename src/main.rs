@@ -46,6 +46,14 @@ const THRESHOLD: f32 = 0.7;
 const SPAM_CPS: u32 = 20;
 const NO_PROGRESS_LIMIT: u64 = 45;
 
+// Detection box dimensions for ESP overlay
+const DETECTION_BOX_SMALL_WIDTH: i32 = 60;
+const DETECTION_BOX_SMALL_HEIGHT: i32 = 30;
+const DETECTION_BOX_MEDIUM_WIDTH: i32 = 80;
+const DETECTION_BOX_MEDIUM_HEIGHT: i32 = 40;
+const DETECTION_BOX_LARGE_WIDTH: i32 = 100;
+const DETECTION_BOX_LARGE_HEIGHT: i32 = 50;
+
 /// Session statistics
 #[derive(Debug, Clone, Default)]
 struct SessionStats {
@@ -622,10 +630,10 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
         {
             // Add detection box for default screen
             detection_boxes.push(DetectionBox {
-                x: dx - 50,
-                y: dy - 25,
-                width: 100,
-                height: 50,
+                x: dx - DETECTION_BOX_LARGE_WIDTH / 2,
+                y: dy - DETECTION_BOX_LARGE_HEIGHT / 2,
+                width: DETECTION_BOX_LARGE_WIDTH,
+                height: DETECTION_BOX_LARGE_HEIGHT,
                 label: "Default Screen".to_string(),
                 confidence: THRESHOLD,
                 color: "#00ff00".to_string(),
@@ -647,15 +655,16 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
             {
                 // Add detection box for broken rod
                 detection_boxes.push(DetectionBox {
-                    x: bx - 40,
-                    y: by - 20,
-                    width: 80,
-                    height: 40,
+                    x: bx - DETECTION_BOX_MEDIUM_WIDTH / 2,
+                    y: by - DETECTION_BOX_MEDIUM_HEIGHT / 2,
+                    width: DETECTION_BOX_MEDIUM_WIDTH,
+                    height: DETECTION_BOX_MEDIUM_HEIGHT,
                     label: "Broken Rod!".to_string(),
                     confidence: 0.9,
                     color: "#ff0000".to_string(),
                 });
-                SHARED_STATE.set_detection_boxes(detection_boxes.clone());
+                // Use the detection boxes directly (will be updated on continue)
+                SHARED_STATE.set_detection_boxes(detection_boxes);
 
                 println!("Broken pole detected -> pressing rods key");
                 SHARED_STATE.set_activity(BotActivity::HandlingBrokenRod);
@@ -681,10 +690,10 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
                 {
                     // Add detection box for use rod button
                     SHARED_STATE.set_detection_boxes(vec![DetectionBox {
-                        x: pos.0 - 40,
-                        y: pos.1 - 15,
-                        width: 80,
-                        height: 30,
+                        x: pos.0 - DETECTION_BOX_MEDIUM_WIDTH / 2,
+                        y: pos.1 - DETECTION_BOX_SMALL_HEIGHT / 2,
+                        width: DETECTION_BOX_MEDIUM_WIDTH,
+                        height: DETECTION_BOX_SMALL_HEIGHT,
                         label: "Use Rod".to_string(),
                         confidence: 0.9,
                         color: "#00aaff".to_string(),
@@ -731,10 +740,10 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
                 {
                     // Add detection box for catch button
                     SHARED_STATE.set_detection_boxes(vec![DetectionBox {
-                        x: pos.0 - 30,
-                        y: pos.1 - 15,
-                        width: 60,
-                        height: 30,
+                        x: pos.0 - DETECTION_BOX_SMALL_WIDTH / 2,
+                        y: pos.1 - DETECTION_BOX_SMALL_HEIGHT / 2,
+                        width: DETECTION_BOX_SMALL_WIDTH,
+                        height: DETECTION_BOX_SMALL_HEIGHT,
                         label: "Catch!".to_string(),
                         confidence: 0.9,
                         color: "#ff00ff".to_string(),
