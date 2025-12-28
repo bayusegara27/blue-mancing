@@ -8,6 +8,7 @@ use opencv::{
     imgcodecs, imgproc,
     prelude::*,
 };
+use rusty_tesseract::{Args, Image as TessImage};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -15,6 +16,11 @@ use std::time::Duration;
 use super::base::get_resolution_folder;
 use super::screen_service::{Region, ScreenService};
 use crate::utils::path::get_data_dir;
+
+/// Default confidence value when OCR successfully detects text.
+/// This value is used because Tesseract doesn't provide per-word confidence easily,
+/// and 0.8 represents a reasonable confidence for successful text detection.
+const DEFAULT_OCR_CONFIDENCE: f32 = 0.8;
 
 /// Image service for template matching and fish detection
 pub struct ImageService {
@@ -199,15 +205,15 @@ impl ImageService {
         Some(screenshot.to_luma8())
     }
 
-    /// Find best matching fish using template matching
-    /// Crop region aligned with Python version for accurate detection
-    /// Returns fish_name and confidence
+    /// Find best matching fish using OCR (like Python version)
+    /// Crops the fish name region and uses Tesseract OCR to read the text
+    /// Returns fish_name (normalized) and confidence
     pub fn find_best_matching_fish(
         &self,
         window_rect: Option<(i32, i32, i32, i32)>,
         img: Option<GrayImage>,
     ) -> (Option<String>, f32) {
-        tracing::debug!("[FISH_DETECT] Starting fish detection...");
+        tracing::debug!("[FISH_DETECT] Starting OCR-based fish detection...");
 
         let img = match img {
             Some(i) => i,
@@ -223,139 +229,84 @@ impl ImageService {
         let (h, w) = (img.height(), img.width());
         tracing::trace!("[FISH_DETECT] Image size: {}x{}", w, h);
 
-        // Crop area for fish detection - optimized region for template matching
-        // Python OCR version uses: crop_x1 = w * 0.56, crop_y1 = h * 0.66, width = w * 0.30, height = h * 0.08
-        // We use a larger region since template matching needs more area than OCR text detection
-        let crop_x1 = (w as f32 * 0.50) as u32; // Start from 50% of screen width
-        let crop_y1 = (h as f32 * 0.50) as u32; // Start from 50% of screen height
-        let crop_w = (w as f32 * 0.40) as u32; // 40% of screen width
-        let crop_h = (h as f32 * 0.35) as u32; // 35% of screen height
+        // Crop area for fish name - EXACTLY like Python version
+        // Python: crop_x1 = int(w * 0.56), crop_y1 = int(h * 0.66)
+        //         crop_x2 = crop_x1 + int(w * 0.30), crop_y2 = crop_y1 + int(h * 0.08)
+        let crop_x1 = (w as f32 * 0.56) as u32;
+        let crop_y1 = (h as f32 * 0.66) as u32;
+        let crop_w = (w as f32 * 0.30) as u32;
+        let crop_h = (h as f32 * 0.08) as u32;
 
         tracing::trace!(
-            "[FISH_DETECT] Crop region: x={}, y={}, w={}, h={}",
+            "[FISH_DETECT] OCR crop region: x={}, y={}, w={}, h={}",
             crop_x1,
             crop_y1,
             crop_w,
             crop_h
         );
 
+        // Ensure crop region is within bounds
+        if crop_x1 + crop_w > w || crop_y1 + crop_h > h {
+            tracing::debug!("[FISH_DETECT] Crop region out of bounds");
+            return (None, 0.0);
+        }
+
         let crop = image::imageops::crop_imm(&img, crop_x1, crop_y1, crop_w, crop_h).to_image();
 
-        // Convert cropped image to OpenCV Mat
-        let crop_mat = match Self::gray_image_to_mat(&crop) {
-            Ok(m) => m,
+        // Convert GrayImage to DynamicImage for Tesseract
+        let dynamic_img = image::DynamicImage::ImageLuma8(crop);
+
+        // Run OCR using Tesseract (similar to Python's EasyOCR)
+        let tess_image = match TessImage::from_dynamic_image(&dynamic_img) {
+            Ok(img) => img,
             Err(e) => {
-                tracing::debug!("[FISH_DETECT] Failed to convert crop to Mat: {:?}", e);
+                tracing::debug!("[FISH_DETECT] Failed to create Tesseract image: {:?}", e);
                 return (None, 0.0);
             }
         };
 
-        let fish_folder = self
-            .target_images_folder
-            .join(&self.resolution_folder)
-            .join("fish");
+        // Configure Tesseract args for English text recognition
+        let args = Args {
+            lang: "eng".to_string(),
+            config_variables: std::collections::HashMap::new(),
+            dpi: Some(150),
+            psm: Some(7), // Single line mode - best for fish names
+            oem: Some(3), // Default OCR Engine Mode
+        };
 
-        if !fish_folder.exists() {
-            tracing::warn!(
-                "[FISH_DETECT] Fish folder does not exist: {:?}",
-                fish_folder
-            );
+        // Perform OCR
+        let ocr_result = match rusty_tesseract::image_to_string(&tess_image, &args) {
+            Ok(text) => text,
+            Err(e) => {
+                tracing::debug!("[FISH_DETECT] OCR failed: {:?}", e);
+                return (None, 0.0);
+            }
+        };
+
+        let text = ocr_result.trim();
+        if text.is_empty() {
+            tracing::debug!("[FISH_DETECT] OCR returned empty text");
             return (None, 0.0);
         }
 
-        let mut best_fish: Option<String> = None;
-        let mut best_score = 0.0f32;
-        let mut template_count = 0;
-        let mut skipped_count = 0;
-
-        if let Ok(entries) = fs::read_dir(&fish_folder) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) != Some("png") {
-                    continue;
-                }
-
-                template_count += 1;
-                let template_name = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-
-                // Load template with OpenCV
-                let template = match Self::load_template_grayscale(&path) {
-                    Ok(t) => t,
-                    Err(_) => continue,
-                };
-
-                if template.empty() {
-                    continue;
-                }
-
-                // Skip if template is larger than crop
-                if template.cols() >= crop_mat.cols() || template.rows() >= crop_mat.rows() {
-                    skipped_count += 1;
-                    continue;
-                }
-
-                // Perform template matching using TM_CCOEFF_NORMED (same as Python cv2.TM_CCOEFF_NORMED)
-                let mut result = Mat::default();
-                if imgproc::match_template(
-                    &crop_mat,
-                    &template,
-                    &mut result,
-                    imgproc::TM_CCOEFF_NORMED,
-                    &no_array(),
-                )
-                .is_err()
-                {
-                    continue;
-                }
-
-                // Find maximum value
-                let mut max_val = 0.0;
-                if min_max_loc(&result, None, Some(&mut max_val), None, None, &no_array()).is_err()
-                {
-                    continue;
-                }
-
-                let score = max_val as f32;
-
-                if score > best_score {
-                    best_score = score;
-                    best_fish = Some(template_name);
-                }
-            }
-        }
+        // Normalize the text exactly like Python version:
+        // fish_name = best_text.replace(" ", "_").replace("#", "").lower()
+        let fish_name = text.replace(" ", "_").replace("#", "").to_lowercase();
 
         tracing::debug!(
-            "[FISH_DETECT] Scanned {} templates ({} skipped), best: {:?} (score: {:.3})",
-            template_count,
-            skipped_count,
-            best_fish,
-            best_score
+            "[FISH_DETECT] OCR detected: '{}' -> normalized: '{}'",
+            text,
+            fish_name
         );
 
-        // Normalize fish name to match the format used in fish_config.json
-        // - Spaces are replaced with underscores (e.g., "Glass Bottle" -> "glass_bottle")
-        // - Hash symbols are removed (e.g., "Legacy Part #1" -> "legacy_part_1")
-        // - Converted to lowercase for consistent matching
-        if let Some(ref name) = best_fish {
-            let normalized = name.replace(" ", "_").replace("#", "").to_lowercase();
-            tracing::debug!(
-                "[FISH_DETECT] Detected: '{}' (normalized: '{}') score={:.3}",
-                name,
-                normalized,
-                best_score
-            );
-            return (Some(normalized), best_score);
-        }
+        // Use the named constant for confidence when text is detected
+        let confidence = if !fish_name.is_empty() {
+            DEFAULT_OCR_CONFIDENCE
+        } else {
+            0.0
+        };
 
-        tracing::debug!(
-            "[FISH_DETECT] No fish detected (best score: {:.3})",
-            best_score
-        );
-        (None, 0.0)
+        (Some(fish_name), confidence)
     }
 
     /// Detect arrows in minigame

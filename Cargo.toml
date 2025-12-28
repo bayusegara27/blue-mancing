@@ -22,6 +22,9 @@ serde_json = "1.0"
 image = "0.25"
 opencv = { version = "0.93", default-features = true }
 
+# OCR for fish detection (like Python EasyOCR)
+rusty-tesseract = "1.1.10"
+
 # Screen capture
 screenshots = "0.8"
 
