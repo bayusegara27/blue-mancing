@@ -482,22 +482,22 @@ fn get_keys_json() -> String {
 /// Get overlay settings as JSON
 #[cfg(all(feature = "gui", windows))]
 fn get_overlay_settings_json() -> String {
-    use crate::ui::stats_api::StatsApi;
+    use crate::ui::stats_api::OverlaySettings;
 
-    let stats = StatsApi::new();
-    let mut settings = std::collections::HashMap::new();
+    let settings = OverlaySettings::load();
+    let mut result = std::collections::HashMap::new();
 
-    settings.insert(
+    result.insert(
         "show_debug_overlay".to_string(),
-        stats.get_show_debug_overlay(),
+        settings.show_debug_overlay,
     );
-    settings.insert(
+    result.insert(
         "overlay_always_on_top".to_string(),
-        stats.get_overlay_always_on_top(),
+        settings.overlay_always_on_top,
     );
-    settings.insert("show_overlay".to_string(), stats.get_show_overlay());
+    result.insert("show_overlay".to_string(), settings.show_overlay);
 
-    serde_json::to_string(&settings).unwrap_or_else(|_| {
+    serde_json::to_string(&result).unwrap_or_else(|_| {
         r#"{"show_debug_overlay":true,"overlay_always_on_top":true,"show_overlay":true}"#
             .to_string()
     })
@@ -513,7 +513,7 @@ enum UserEvent {
 /// Start the UI (main entry point)
 #[cfg(all(feature = "gui", windows))]
 pub fn start_ui() {
-    use crate::ui::stats_api::StatsApi;
+    use crate::ui::stats_api::OverlaySettings;
     use std::sync::mpsc;
     use std::thread;
     use std::time::Duration;
@@ -628,27 +628,31 @@ pub fn start_ui() {
 
         match event {
             Event::UserEvent(UserEvent::UpdateOverlay) => {
-                // Read current overlay settings
-                let stats = StatsApi::new();
-                let show_overlay = stats.get_show_overlay();
-                let show_debug = stats.get_show_debug_overlay();
-                let always_on_top = stats.get_overlay_always_on_top();
+                // Read current overlay settings (lightweight, doesn't load fish stats)
+                let settings = OverlaySettings::load();
 
                 // Update overlay window visibility
-                overlay_window.set_visible(show_overlay);
+                overlay_window.set_visible(settings.show_overlay);
 
                 // Update always-on-top state
-                overlay_window.set_always_on_top(always_on_top);
+                overlay_window.set_always_on_top(settings.overlay_always_on_top);
 
-                // Update overlay with current bot status and settings
+                // Update overlay with current bot status
                 let status_json = SHARED_STATE.to_json();
-                let js = format!(
-                    "if (window.updateFromRust) {{ window.updateFromRust({}); }} if (window.updateOverlaySettings) {{ window.updateOverlaySettings({{ showDebug: {}, alwaysOnTop: {} }}); }}",
-                    status_json, show_debug, always_on_top
+                let status_js = format!(
+                    "if (window.updateFromRust) {{ window.updateFromRust({}); }}",
+                    status_json
+                );
+
+                // Update overlay settings (debug visibility, etc.)
+                let settings_js = format!(
+                    "if (window.updateOverlaySettings) {{ window.updateOverlaySettings({{ showDebug: {}, alwaysOnTop: {} }}); }}",
+                    settings.show_debug_overlay, settings.overlay_always_on_top
                 );
 
                 if let Some(webview) = overlay_webview_clone.try_lock() {
-                    let _ = webview.evaluate_script(&js);
+                    let _ = webview.evaluate_script(&status_js);
+                    let _ = webview.evaluate_script(&settings_js);
                 }
             }
             Event::WindowEvent {

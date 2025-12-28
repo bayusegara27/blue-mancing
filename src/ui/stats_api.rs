@@ -460,3 +460,51 @@ impl Default for StatsApi {
         Self::new()
     }
 }
+
+/// Lightweight struct for reading only overlay settings
+/// Use this instead of StatsApi when you only need overlay settings
+/// to avoid loading fish logs and other heavy data
+#[derive(Debug, Clone)]
+pub struct OverlaySettings {
+    pub show_overlay: bool,
+    pub show_debug_overlay: bool,
+    pub overlay_always_on_top: bool,
+}
+
+impl OverlaySettings {
+    /// Load overlay settings from file
+    pub fn load() -> Self {
+        let base = get_data_dir();
+        let settings_file = base.join("config").join("settings.json");
+
+        let settings: HashMap<String, String> = if settings_file.exists() {
+            fs::read_to_string(&settings_file)
+                .ok()
+                .and_then(|content| serde_json::from_str(&content).ok())
+                .unwrap_or_default()
+        } else {
+            HashMap::new()
+        };
+
+        Self {
+            show_overlay: settings
+                .get("show_overlay")
+                .map(|s| s == "true")
+                .unwrap_or(true),
+            show_debug_overlay: settings
+                .get("show_debug_overlay")
+                .map(|s| s == "true")
+                .unwrap_or(true),
+            overlay_always_on_top: settings
+                .get("overlay_always_on_top")
+                .map(|s| s == "true")
+                .unwrap_or(true),
+        }
+    }
+}
+
+impl Default for OverlaySettings {
+    fn default() -> Self {
+        Self::load()
+    }
+}
