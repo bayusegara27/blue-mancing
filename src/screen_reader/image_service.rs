@@ -71,7 +71,7 @@ impl ImageService {
         }
         
         // Use imageproc's optimized template matching with CrossCorrelationNormalized
-        // This is similar to OpenCV's TM_CCOEFF_NORMED and gives values in [0, 1] range
+        // Values are normalized to [0, 1] range where higher values indicate better match
         let result = match_template(&img_gray, &template, MatchTemplateMethod::CrossCorrelationNormalized);
         let extremes = find_extremes(&result);
         
