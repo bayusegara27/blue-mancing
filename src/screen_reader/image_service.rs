@@ -223,9 +223,9 @@ impl ImageService {
         let (h, w) = (img.height(), img.width());
         tracing::trace!("[FISH_DETECT] Image size: {}x{}", w, h);
 
-        // Crop area for fish detection - aligned with Python version (fishing-py/src/screen_reader/image_service.py)
-        // Python uses: crop_x1 = w * 0.56, crop_y1 = h * 0.66, width = w * 0.30, height = h * 0.08
-        // We use a slightly larger region to accommodate both text and image detection
+        // Crop area for fish detection - optimized region for template matching
+        // Python OCR version uses: crop_x1 = w * 0.56, crop_y1 = h * 0.66, width = w * 0.30, height = h * 0.08
+        // We use a larger region since template matching needs more area than OCR text detection
         let crop_x1 = (w as f32 * 0.50) as u32; // Start from 50% of screen width
         let crop_y1 = (h as f32 * 0.50) as u32; // Start from 50% of screen height
         let crop_w = (w as f32 * 0.40) as u32; // 40% of screen width
