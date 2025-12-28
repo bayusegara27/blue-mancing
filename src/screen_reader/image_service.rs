@@ -79,6 +79,65 @@ impl ImageService {
         imgcodecs::imread(path_str, imgcodecs::IMREAD_UNCHANGED)
     }
 
+    /// Extract grayscale template and optional alpha mask from an image
+    /// Handles both RGBA (4-channel) and BGR (3-channel) images
+    /// Returns (grayscale_template, optional_mask) or None if conversion fails
+    fn extract_template_and_mask(template_img: &Mat) -> Option<(Mat, Option<Mat>)> {
+        if template_img.empty() {
+            return None;
+        }
+
+        if template_img.channels() == 4 {
+            // Extract BGR and alpha channel from RGBA image
+            let mut channels = opencv::core::Vector::<Mat>::new();
+            if opencv::core::split(template_img, &mut channels).is_err() {
+                return None;
+            }
+
+            if channels.len() < 4 {
+                return None;
+            }
+
+            // Get individual channels
+            let ch0 = channels.get(0).ok()?;
+            let ch1 = channels.get(1).ok()?;
+            let ch2 = channels.get(2).ok()?;
+            let alpha = channels.get(3).ok()?;
+
+            // Merge BGR channels and convert to grayscale
+            let mut bgr = Mat::default();
+            let mut gray = Mat::default();
+            let bgr_channels = opencv::core::Vector::<Mat>::from_iter([ch0, ch1, ch2]);
+
+            if opencv::core::merge(&bgr_channels, &mut bgr).is_err() {
+                return None;
+            }
+
+            if imgproc::cvt_color(&bgr, &mut gray, imgproc::COLOR_BGR2GRAY, 0).is_err() {
+                return None;
+            }
+
+            // Create mask from alpha channel (alpha > 0)
+            // Like Python: mask = cv2.threshold(alpha, 1, 255, cv2.THRESH_BINARY)[1]
+            let mut mask = Mat::default();
+            if imgproc::threshold(&alpha, &mut mask, 1.0, 255.0, imgproc::THRESH_BINARY).is_err() {
+                return None;
+            }
+
+            Some((gray, Some(mask)))
+        } else if template_img.channels() == 3 {
+            // Convert BGR to grayscale
+            let mut gray = Mat::default();
+            if imgproc::cvt_color(template_img, &mut gray, imgproc::COLOR_BGR2GRAY, 0).is_err() {
+                return None;
+            }
+            Some((gray, None))
+        } else {
+            // Already grayscale
+            Some((template_img.clone(), None))
+        }
+    }
+
     /// Find a single image on the screen within a given window rectangle
     /// Returns center coordinates if found, else None
     pub fn find_image_in_window(
@@ -274,73 +333,10 @@ impl ImageService {
                 Err(_) => continue,
             };
 
-            if template_img.empty() {
-                continue;
-            }
-
-            // Handle alpha channel if present (4-channel image)
-            let (template, mask): (Mat, Option<Mat>) = if template_img.channels() == 4 {
-                // Extract BGR and alpha channel
-                let mut channels = opencv::core::Vector::<Mat>::new();
-                if opencv::core::split(&template_img, &mut channels).is_err() {
-                    continue;
-                }
-
-                if channels.len() < 4 {
-                    continue;
-                }
-
-                // Convert BGR to grayscale
-                let mut bgr = Mat::default();
-                let mut gray = Mat::default();
-
-                let ch0 = match channels.get(0) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-                let ch1 = match channels.get(1) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-                let ch2 = match channels.get(2) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-                let bgr_channels = opencv::core::Vector::<Mat>::from_iter([ch0, ch1, ch2]);
-
-                if opencv::core::merge(&bgr_channels, &mut bgr).is_err() {
-                    continue;
-                }
-
-                if imgproc::cvt_color(&bgr, &mut gray, imgproc::COLOR_BGR2GRAY, 0).is_err() {
-                    continue;
-                }
-
-                // Create mask from alpha channel (alpha > 0)
-                // Like Python: mask = cv2.threshold(alpha, 1, 255, cv2.THRESH_BINARY)[1]
-                let alpha = match channels.get(3) {
-                    Ok(a) => a,
-                    Err(_) => continue,
-                };
-                let mut mask = Mat::default();
-                if imgproc::threshold(&alpha, &mut mask, 1.0, 255.0, imgproc::THRESH_BINARY)
-                    .is_err()
-                {
-                    continue;
-                }
-
-                (gray, Some(mask))
-            } else if template_img.channels() == 3 {
-                // Convert BGR to grayscale
-                let mut gray = Mat::default();
-                if imgproc::cvt_color(&template_img, &mut gray, imgproc::COLOR_BGR2GRAY, 0).is_err()
-                {
-                    continue;
-                }
-                (gray, None)
-            } else {
-                // Already grayscale
-                (template_img, None)
+            // Extract grayscale template and optional mask
+            let (template, mask) = match Self::extract_template_and_mask(&template_img) {
+                Some(result) => result,
+                None => continue,
             };
 
             // Skip if template is larger than image
@@ -454,76 +450,10 @@ impl ImageService {
                 Err(_) => continue,
             };
 
-            if template_img.empty() {
-                continue;
-            }
-
-            // Handle alpha channel if present (4-channel image)
-            let (template, mask): (Mat, Option<Mat>) = if template_img.channels() == 4 {
-                // Extract BGR and alpha channel
-                let mut channels = opencv::core::Vector::<Mat>::new();
-                if opencv::core::split(&template_img, &mut channels).is_err() {
-                    continue;
-                }
-
-                // Verify we have at least 4 channels
-                if channels.len() < 4 {
-                    continue;
-                }
-
-                // Convert BGR to grayscale
-                let mut bgr = Mat::default();
-                let mut gray = Mat::default();
-
-                // Merge BGR channels (first 3) - explicitly get each channel
-                let ch0 = match channels.get(0) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-                let ch1 = match channels.get(1) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-                let ch2 = match channels.get(2) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-                let bgr_channels = opencv::core::Vector::<Mat>::from_iter([ch0, ch1, ch2]);
-
-                if opencv::core::merge(&bgr_channels, &mut bgr).is_err() {
-                    continue;
-                }
-
-                if imgproc::cvt_color(&bgr, &mut gray, imgproc::COLOR_BGR2GRAY, 0).is_err() {
-                    continue;
-                }
-
-                // Create mask from alpha channel (alpha > 0)
-                let alpha = match channels.get(3) {
-                    Ok(a) => a,
-                    Err(_) => continue,
-                };
-                let mut mask = Mat::default();
-                if imgproc::threshold(&alpha, &mut mask, 1.0, 255.0, imgproc::THRESH_BINARY)
-                    .is_err()
-                {
-                    continue;
-                }
-
-                (gray, Some(mask))
-            } else {
-                // Convert to grayscale if not already
-                let mut gray = Mat::default();
-                if template_img.channels() == 3 {
-                    if imgproc::cvt_color(&template_img, &mut gray, imgproc::COLOR_BGR2GRAY, 0)
-                        .is_err()
-                    {
-                        continue;
-                    }
-                } else {
-                    gray = template_img;
-                }
-                (gray, None)
+            // Extract grayscale template and optional mask
+            let (template, mask) = match Self::extract_template_and_mask(&template_img) {
+                Some(result) => result,
+                None => continue,
             };
 
             // Skip if template is larger than crop
