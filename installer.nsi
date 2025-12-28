@@ -13,7 +13,7 @@ UninstallIcon "icons/icon.ico"
 !define AppId "blue-mancing"
 ; AppVersion can be passed from command line: makensis /DAppVersion=x.y.z installer.nsi
 !ifndef AppVersion
-  !define AppVersion "2.1.0"
+  !define AppVersion "2.1.2"
 !endif
 !define AppExecutable "blue-mancing.exe"
 !define AppDLL "opencv_world4100.dll"
