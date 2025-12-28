@@ -2,11 +2,11 @@
 
 #![allow(dead_code)]
 
+use crate::utils::path::get_data_dir;
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use serde::{Deserialize, Serialize};
-use once_cell::sync::Lazy;
-use crate::utils::path::get_data_dir;
 
 /// Default settings
 pub static DEFAULT_SETTINGS: Lazy<HashMap<String, String>> = Lazy::new(|| {
@@ -61,10 +61,12 @@ fn get_settings_path() -> std::path::PathBuf {
 /// Get current settings
 pub fn get_settings() -> HashMap<String, String> {
     let settings_file = get_settings_path();
-    
+
     if settings_file.exists() {
         if let Ok(content) = fs::read_to_string(&settings_file) {
-            if let Ok(user_settings) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
+            if let Ok(user_settings) =
+                serde_json::from_str::<HashMap<String, serde_json::Value>>(&content)
+            {
                 let mut settings = DEFAULT_SETTINGS.clone();
                 for (key, value) in user_settings {
                     if let Some(s) = value.as_str() {
@@ -75,13 +77,16 @@ pub fn get_settings() -> HashMap<String, String> {
             }
         }
     }
-    
+
     DEFAULT_SETTINGS.clone()
 }
 
 /// Get resolution folder based on current settings
 pub fn get_resolution_folder() -> String {
-    get_settings().get("resolution").cloned().unwrap_or_else(|| "1920x1080".to_string())
+    get_settings()
+        .get("resolution")
+        .cloned()
+        .unwrap_or_else(|| "1920x1080".to_string())
 }
 
 #[cfg(test)]

@@ -2,16 +2,16 @@
 
 #![allow(dead_code)]
 
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use once_cell::sync::Lazy;
 
 #[cfg(all(feature = "gui", windows))]
-use std::fs;
+use crate::utils::bot_state::{BotActivity, SHARED_STATE};
 #[cfg(all(feature = "gui", windows))]
 use crate::utils::path::get_data_dir;
 #[cfg(all(feature = "gui", windows))]
-use crate::utils::bot_state::{SHARED_STATE, BotActivity};
+use std::fs;
 
 /// Window types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -21,9 +21,8 @@ pub enum Window {
 }
 
 /// Global window registry
-static WINDOWS: Lazy<Arc<RwLock<HashMap<Window, WindowHandle>>>> = Lazy::new(|| {
-    Arc::new(RwLock::new(HashMap::new()))
-});
+static WINDOWS: Lazy<Arc<RwLock<HashMap<Window, WindowHandle>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 /// Window handle wrapper
 #[derive(Clone)]
@@ -47,13 +46,13 @@ pub fn register_window(window_type: Window, handle: WindowHandle) {
 /// Handle IPC message from JavaScript
 #[cfg(all(feature = "gui", windows))]
 fn handle_ipc_message(message: &str) -> Option<String> {
-    use crate::utils::bot_state::SHARED_STATE;
     use crate::utils::bot_state::BotActivity;
-    
+    use crate::utils::bot_state::SHARED_STATE;
+
     // Parse the message as JSON
     let parsed: serde_json::Value = serde_json::from_str(message).ok()?;
     let action = parsed.get("action")?.as_str()?;
-    
+
     match action {
         "start" => {
             println!("UI: Start button clicked");
@@ -71,9 +70,7 @@ fn handle_ipc_message(message: &str) -> Option<String> {
             SHARED_STATE.set_detail_message("Stopped from UI");
             Some(r#"{"success": true, "action": "stop"}"#.to_string())
         }
-        "getStatus" => {
-            Some(SHARED_STATE.to_json())
-        }
+        "getStatus" => Some(SHARED_STATE.to_json()),
         "minimize" => {
             // Window minimize is handled by the window itself
             Some(r#"{"success": true, "action": "minimize"}"#.to_string())
@@ -92,27 +89,27 @@ fn handle_ipc_message(message: &str) -> Option<String> {
 /// Handle IPC message from dashboard JavaScript - supports full API
 #[cfg(all(feature = "gui", windows))]
 fn handle_dashboard_ipc(message: &str) -> String {
-    use crate::utils::keybinds::get_key;
     use crate::ui::stats_api::StatsApi;
-    use pulldown_cmark::{Parser, Options, html};
-    
+    use crate::utils::keybinds::get_key;
+    use pulldown_cmark::{html, Options, Parser};
+
     // Parse the message as JSON
     let parsed: serde_json::Value = match serde_json::from_str(message) {
         Ok(v) => v,
         Err(_) => return r#"{"error": "Invalid JSON"}"#.to_string(),
     };
-    
+
     let action = match parsed.get("action").and_then(|a| a.as_str()) {
         Some(a) => a,
         None => return r#"{"error": "Missing action"}"#.to_string(),
     };
-    
+
     match action {
         "get_guide" => {
             // Load and convert GUIDE.md to HTML
             let base = get_data_dir();
             let guide_path = base.join("GUIDE.md");
-            
+
             let markdown = match fs::read_to_string(&guide_path) {
                 Ok(content) => content,
                 Err(_) => {
@@ -123,14 +120,14 @@ fn handle_dashboard_ipc(message: &str) -> String {
                     }
                 }
             };
-            
+
             // Convert markdown to HTML
             let mut options = Options::empty();
             options.insert(Options::ENABLE_STRIKETHROUGH);
             let parser = Parser::new_ext(&markdown, options);
             let mut html_output = String::new();
             html::push_html(&mut html_output, parser);
-            
+
             // Wrap in a div with styling
             let result = format!(r#"<div class="intro-card">{}</div>"#, html_output);
             serde_json::to_string(&result).unwrap_or_else(|_| r#""""#.to_string())
@@ -151,7 +148,10 @@ fn handle_dashboard_ipc(message: &str) -> String {
             serde_json::to_string(&res).unwrap_or_else(|_| r#""1920x1080""#.to_string())
         }
         "set_resolution" => {
-            let res = parsed.get("value").and_then(|v| v.as_str()).unwrap_or("1920x1080");
+            let res = parsed
+                .get("value")
+                .and_then(|v| v.as_str())
+                .unwrap_or("1920x1080");
             let mut stats = StatsApi::new();
             stats.set_resolution(res);
             r#"{"success": true}"#.to_string()
@@ -171,7 +171,10 @@ fn handle_dashboard_ipc(message: &str) -> String {
             serde_json::to_string(&current).unwrap_or_else(|_| r#""F9""#.to_string())
         }
         "set_debug_overlay" => {
-            let value = parsed.get("value").and_then(|v| v.as_bool()).unwrap_or(true);
+            let value = parsed
+                .get("value")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
             let mut stats = StatsApi::new();
             stats.set_show_debug_overlay(value);
             r#"{"success": true}"#.to_string()
@@ -182,7 +185,10 @@ fn handle_dashboard_ipc(message: &str) -> String {
             serde_json::to_string(&value).unwrap_or_else(|_| "true".to_string())
         }
         "set_overlay_on_top" => {
-            let value = parsed.get("value").and_then(|v| v.as_bool()).unwrap_or(true);
+            let value = parsed
+                .get("value")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
             let mut stats = StatsApi::new();
             stats.set_overlay_always_on_top(value);
             r#"{"success": true}"#.to_string()
@@ -193,7 +199,10 @@ fn handle_dashboard_ipc(message: &str) -> String {
             serde_json::to_string(&value).unwrap_or_else(|_| "true".to_string())
         }
         "set_show_overlay" => {
-            let value = parsed.get("value").and_then(|v| v.as_bool()).unwrap_or(true);
+            let value = parsed
+                .get("value")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
             let mut stats = StatsApi::new();
             stats.set_show_overlay(value);
             r#"{"success": true}"#.to_string()
@@ -350,7 +359,7 @@ fn inject_api_bridge(html: &str) -> String {
 })();
 </script>
 "#;
-    
+
     // Also inject preloaded data
     let guide_data = get_guide_html();
     let daily_data = get_daily_html();
@@ -358,8 +367,9 @@ fn inject_api_bridge(html: &str) -> String {
     let resolution = get_resolution_value();
     let keys_data = get_keys_json();
     let settings_data = get_overlay_settings_json();
-    
-    let preload_script = format!(r#"
+
+    let preload_script = format!(
+        r#"
 <script>
 // Preloaded data for immediate display
 window.__bluemancing_guide = {};
@@ -369,7 +379,7 @@ window.__bluemancing_resolution = {};
 window.__bluemancing_keys = {};
 window.__bluemancing_settings = {};
 </script>
-"#, 
+"#,
         serde_json::to_string(&guide_data).unwrap_or_else(|_| "\"\"".to_string()),
         serde_json::to_string(&daily_data).unwrap_or_else(|_| "\"\"".to_string()),
         serde_json::to_string(&summary_data).unwrap_or_else(|_| "\"\"".to_string()),
@@ -377,7 +387,7 @@ window.__bluemancing_settings = {};
         keys_data,
         settings_data
     );
-    
+
     // Inject before </head> tag
     if let Some(pos) = html.find("</head>") {
         let mut result = html.to_string();
@@ -393,11 +403,11 @@ window.__bluemancing_settings = {};
 /// Get guide HTML content
 #[cfg(all(feature = "gui", windows))]
 fn get_guide_html() -> String {
-    use pulldown_cmark::{Parser, Options, html};
-    
+    use pulldown_cmark::{html, Options, Parser};
+
     let base = get_data_dir();
     let guide_path = base.join("GUIDE.md");
-    
+
     let markdown = match fs::read_to_string(&guide_path) {
         Ok(content) => content,
         Err(_) => {
@@ -408,14 +418,14 @@ fn get_guide_html() -> String {
             }
         }
     };
-    
+
     // Convert markdown to HTML
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     let parser = Parser::new_ext(&markdown, options);
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
-    
+
     format!(r#"<div class="intro-card">{}</div>"#, html_output)
 }
 
@@ -447,32 +457,50 @@ fn get_resolution_value() -> String {
 #[cfg(all(feature = "gui", windows))]
 fn get_keys_json() -> String {
     use crate::utils::keybinds::get_key;
-    
-    let key_names = ["start_key", "stop_key", "fish_key", "bait_key", "rods_key", "esc_key", "left_key", "right_key"];
+
+    let key_names = [
+        "start_key",
+        "stop_key",
+        "fish_key",
+        "bait_key",
+        "rods_key",
+        "esc_key",
+        "left_key",
+        "right_key",
+    ];
     let mut keys = std::collections::HashMap::new();
-    
+
     for name in &key_names {
         if let Some(value) = get_key(name) {
             keys.insert(name.to_string(), value);
         }
     }
-    
+
     serde_json::to_string(&keys).unwrap_or_else(|_| "{}".to_string())
 }
 
 /// Get overlay settings as JSON
 #[cfg(all(feature = "gui", windows))]
 fn get_overlay_settings_json() -> String {
-    use crate::ui::stats_api::StatsApi;
-    
-    let stats = StatsApi::new();
-    let mut settings = std::collections::HashMap::new();
-    
-    settings.insert("show_debug_overlay".to_string(), stats.get_show_debug_overlay());
-    settings.insert("overlay_always_on_top".to_string(), stats.get_overlay_always_on_top());
-    settings.insert("show_overlay".to_string(), stats.get_show_overlay());
-    
-    serde_json::to_string(&settings).unwrap_or_else(|_| r#"{"show_debug_overlay":true,"overlay_always_on_top":true,"show_overlay":true}"#.to_string())
+    use crate::ui::stats_api::OverlaySettings;
+
+    let settings = OverlaySettings::load();
+    let mut result = std::collections::HashMap::new();
+
+    result.insert(
+        "show_debug_overlay".to_string(),
+        settings.show_debug_overlay,
+    );
+    result.insert(
+        "overlay_always_on_top".to_string(),
+        settings.overlay_always_on_top,
+    );
+    result.insert("show_overlay".to_string(), settings.show_overlay);
+
+    serde_json::to_string(&result).unwrap_or_else(|_| {
+        r#"{"show_debug_overlay":true,"overlay_always_on_top":true,"show_overlay":true}"#
+            .to_string()
+    })
 }
 
 /// Custom event types for the event loop
@@ -480,33 +508,35 @@ fn get_overlay_settings_json() -> String {
 #[derive(Debug, Clone)]
 enum UserEvent {
     UpdateOverlay,
+    UpdateDashboard,
 }
 
 /// Start the UI (main entry point)
 #[cfg(all(feature = "gui", windows))]
 pub fn start_ui() {
+    use crate::ui::stats_api::OverlaySettings;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
     use tao::{
         event::{Event, WindowEvent},
         event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy},
         window::WindowBuilder,
     };
     use wry::WebViewBuilder;
-    use std::sync::mpsc;
-    use std::thread;
-    use std::time::Duration;
-    
+
     let base = get_data_dir();
     let html_path = base.join("html");
-    
+
     // Load HTML content - prefer the updated overlay HTML with IPC support
     let overlay_html = fs::read_to_string(html_path.join("overlay.html"))
         .unwrap_or_else(|_| get_default_overlay_html().to_string());
     let main_html = fs::read_to_string(html_path.join("main.html"))
         .unwrap_or_else(|_| get_default_main_html().to_string());
-    
+
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
-    
+
     // Create main window
     let main_window = WindowBuilder::new()
         .with_title("Blue Mancing - Dashboard")
@@ -515,10 +545,10 @@ pub fn start_ui() {
         .with_resizable(true)
         .build(&event_loop)
         .expect("Failed to create main window");
-    
+
     // Inject the pywebview API bridge into the main HTML
     let main_html_with_api = inject_api_bridge(&main_html);
-    
+
     // Build main webview with IPC handler for dashboard API calls
     let main_webview = WebViewBuilder::new()
         .with_html(&main_html_with_api)
@@ -531,29 +561,37 @@ pub fn start_ui() {
         })
         .build(&main_window)
         .expect("Failed to create main webview");
-    
+
     // Store main webview for evaluating scripts
     let main_webview = Arc::new(parking_lot::Mutex::new(main_webview));
-    
-    register_window(Window::Main, WindowHandle {
-        title: "Blue Mancing - Dashboard".to_string(),
-    });
-    
+    let main_webview_clone = main_webview.clone();
+
+    register_window(
+        Window::Main,
+        WindowHandle {
+            title: "Blue Mancing - Dashboard".to_string(),
+        },
+    );
+
     // Create overlay window - compact size to fit HTML content (240px width + padding)
+    // Enable transparency so the window background is invisible when minimized
     let overlay_window = WindowBuilder::new()
         .with_title("Blue Mancing")
         .with_inner_size(tao::dpi::LogicalSize::new(244, 260))
         .with_resizable(false)
         .with_decorations(false)
         .with_always_on_top(true)
+        .with_transparent(true)
         .build(&event_loop)
         .expect("Failed to create overlay window");
-    
+
     let overlay_window_id = overlay_window.id();
-    
+
     // Build overlay webview with IPC handler
+    // Enable transparency in webview so background is see-through
     let overlay_webview = WebViewBuilder::new()
         .with_html(&overlay_html)
+        .with_transparent(true)
         .with_ipc_handler(move |request| {
             let message = request.body();
             if let Some(response) = handle_ipc_message(message) {
@@ -562,42 +600,101 @@ pub fn start_ui() {
         })
         .build(&overlay_window)
         .expect("Failed to create overlay webview");
-    
+
     // Store webview in Arc for thread-safe access
     let overlay_webview = Arc::new(parking_lot::Mutex::new(overlay_webview));
     let overlay_webview_clone = overlay_webview.clone();
-    
-    register_window(Window::Overlay, WindowHandle {
-        title: "Blue Mancing".to_string(),
-    });
-    
+
+    register_window(
+        Window::Overlay,
+        WindowHandle {
+            title: "Blue Mancing".to_string(),
+        },
+    );
+
     // Spawn a thread to periodically update the overlay with bot status
     // Using 250ms interval to balance responsiveness and CPU usage
     let proxy_clone = proxy.clone();
+    let proxy_clone2 = proxy.clone();
     thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_millis(250));
-            
+
             // Send update event to main thread
             let _ = proxy_clone.send_event(UserEvent::UpdateOverlay);
         }
     });
-    
+
+    // Spawn a thread to periodically update the dashboard data
+    // Using 3 second interval to avoid excessive file reads
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(3));
+
+            // Send dashboard update event to main thread
+            let _ = proxy_clone2.send_event(UserEvent::UpdateDashboard);
+        }
+    });
+
     // Run event loop
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
-        
+
         match event {
             Event::UserEvent(UserEvent::UpdateOverlay) => {
+                // Read current overlay settings (lightweight, doesn't load fish stats)
+                let settings = OverlaySettings::load();
+
+                // Update overlay window visibility
+                overlay_window.set_visible(settings.show_overlay);
+
+                // Update always-on-top state
+                overlay_window.set_always_on_top(settings.overlay_always_on_top);
+
                 // Update overlay with current bot status
                 let status_json = SHARED_STATE.to_json();
-                let js = format!(
+                let status_js = format!(
                     "if (window.updateFromRust) {{ window.updateFromRust({}); }}",
                     status_json
                 );
-                
+
+                // Update overlay settings (debug visibility, etc.)
+                let settings_js = format!(
+                    "if (window.updateOverlaySettings) {{ window.updateOverlaySettings({{ showDebug: {}, alwaysOnTop: {} }}); }}",
+                    settings.show_debug_overlay, settings.overlay_always_on_top
+                );
+
                 if let Some(webview) = overlay_webview_clone.try_lock() {
-                    let _ = webview.evaluate_script(&js);
+                    let _ = webview.evaluate_script(&status_js);
+                    let _ = webview.evaluate_script(&settings_js);
+                }
+            }
+            Event::UserEvent(UserEvent::UpdateDashboard) => {
+                // Refresh dashboard data by updating the preloaded variables
+                let daily_data = get_daily_html();
+                let summary_data = get_summary_html();
+
+                // Escape the HTML for safe JavaScript injection
+                let daily_escaped = serde_json::to_string(&daily_data)
+                    .unwrap_or_else(|_| "\"\"".to_string());
+                let summary_escaped = serde_json::to_string(&summary_data)
+                    .unwrap_or_else(|_| "\"\"".to_string());
+
+                // Update the preloaded data and refresh the UI
+                let update_js = format!(
+                    r#"
+                    window.__bluemancing_daily = {};
+                    window.__bluemancing_summary = {};
+                    // Auto-refresh the current page if it's showing daily or summary
+                    if (typeof refreshCurrentPage === 'function') {{
+                        refreshCurrentPage();
+                    }}
+                    "#,
+                    daily_escaped, summary_escaped
+                );
+
+                if let Some(webview) = main_webview_clone.try_lock() {
+                    let _ = webview.evaluate_script(&update_js);
                 }
             }
             Event::WindowEvent {
@@ -622,7 +719,7 @@ pub fn start_ui() {
 pub fn start_ui() {
     tracing::info!("GUI not available on this platform. Running in headless mode.");
     tracing::info!("Press Ctrl+C to exit.");
-    
+
     // Block forever (until interrupted)
     loop {
         std::thread::sleep(std::time::Duration::from_secs(1));

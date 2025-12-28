@@ -3,9 +3,9 @@
 #[cfg(windows)]
 use enigo::{Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 #[cfg(windows)]
-use parking_lot::Mutex;
-#[cfg(windows)]
 use once_cell::sync::Lazy;
+#[cfg(windows)]
+use parking_lot::Mutex;
 #[cfg(windows)]
 use std::thread;
 #[cfg(windows)]
@@ -26,7 +26,11 @@ static KEYBOARD: Lazy<Mutex<Enigo>> = Lazy::new(|| {
 /// Click at a position
 #[cfg(windows)]
 pub fn click(x: i32, y: i32) {
-    tracing::debug!("[INPUT] click() - moving mouse to ({}, {}) and clicking", x, y);
+    tracing::debug!(
+        "[INPUT] click() - moving mouse to ({}, {}) and clicking",
+        x,
+        y
+    );
     thread::sleep(Duration::from_millis(50));
     let mut mouse = MOUSE.lock();
     if let Err(e) = mouse.move_mouse(x, y, Coordinate::Abs) {
@@ -52,7 +56,7 @@ pub fn press_key(key: &str) {
     tracing::debug!("[INPUT] press_key('{}') - pressing and releasing key", key);
     thread::sleep(Duration::from_millis(50));
     let mut keyboard = KEYBOARD.lock();
-    
+
     if let Some(enigo_key) = string_to_enigo_key(key) {
         if let Err(e) = keyboard.key(enigo_key, Direction::Click) {
             tracing::warn!("[INPUT] Failed to press key '{}': {:?}", key, e);
@@ -60,7 +64,10 @@ pub fn press_key(key: &str) {
             tracing::trace!("[INPUT] Key '{}' pressed and released", key);
         }
     } else {
-        tracing::warn!("[INPUT] Unknown key '{}' - cannot convert to enigo key", key);
+        tracing::warn!(
+            "[INPUT] Unknown key '{}' - cannot convert to enigo key",
+            key
+        );
     }
 }
 
@@ -74,7 +81,7 @@ pub fn press_key(_key: &str) {
 pub fn hold_key(key: &str) {
     tracing::trace!("[INPUT] hold_key('{}') - holding key down", key);
     let mut keyboard = KEYBOARD.lock();
-    
+
     if let Some(enigo_key) = string_to_enigo_key(key) {
         if let Err(e) = keyboard.key(enigo_key, Direction::Press) {
             tracing::warn!("[INPUT] Failed to hold key '{}': {:?}", key, e);
@@ -94,7 +101,7 @@ pub fn hold_key(_key: &str) {
 pub fn release_key(key: &str) {
     tracing::trace!("[INPUT] release_key('{}') - releasing held key", key);
     let mut keyboard = KEYBOARD.lock();
-    
+
     if let Some(enigo_key) = string_to_enigo_key(key) {
         if let Err(e) = keyboard.key(enigo_key, Direction::Release) {
             tracing::warn!("[INPUT] Failed to release key '{}': {:?}", key, e);
@@ -146,7 +153,11 @@ pub fn mouse_release() {
 /// Move mouse to position
 #[cfg(windows)]
 pub fn mouse_move(x: i32, y: i32) {
-    tracing::debug!("[INPUT] mouse_move({}, {}) - moving mouse to position", x, y);
+    tracing::debug!(
+        "[INPUT] mouse_move({}, {}) - moving mouse to position",
+        x,
+        y
+    );
     let mut mouse = MOUSE.lock();
     if let Err(e) = mouse.move_mouse(x, y, Coordinate::Abs) {
         tracing::warn!("[INPUT] Failed to move mouse to ({}, {}): {:?}", x, y, e);
@@ -168,7 +179,7 @@ fn string_to_enigo_key(key: &str) -> Option<Key> {
         let c = key.chars().next()?.to_ascii_lowercase();
         return Some(Key::Unicode(c));
     }
-    
+
     // Handle special keys
     let key_upper = key.to_uppercase();
     match key_upper.as_str() {

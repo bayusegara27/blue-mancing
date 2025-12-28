@@ -2,10 +2,10 @@
 
 #![allow(dead_code)]
 
+use super::base::{Fish, Rarity};
+use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
-use serde::Deserialize;
-use super::base::{Fish, Rarity};
 
 /// Fish configuration file structure
 #[derive(Debug, Deserialize)]
@@ -27,7 +27,7 @@ impl FishService {
             fishes: Vec::new(),
         }
     }
-    
+
     /// Load fish data from config file
     pub fn load_fishes(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let content = fs::read_to_string(&self.config_path)?;
@@ -35,17 +35,17 @@ impl FishService {
         self.fishes = config.fishes;
         Ok(())
     }
-    
+
     /// Get all fish
     pub fn get_all(&self) -> &[Fish] {
         &self.fishes
     }
-    
+
     /// Get fish by rarity
     pub fn get_by_rarity(&self, rarity: Rarity) -> Vec<&Fish> {
         self.fishes.iter().filter(|f| f.rarity == rarity).collect()
     }
-    
+
     /// Get XP value for a given fish name or ID
     pub fn get_xp_by_type(&self, fish_type: &str) -> i32 {
         let fish_type_lower = fish_type.to_lowercase();
@@ -56,13 +56,15 @@ impl FishService {
         }
         0
     }
-    
+
     /// Get fish by name
     pub fn get_by_name(&self, name: &str) -> Option<&Fish> {
         let name_lower = name.to_lowercase();
-        self.fishes.iter().find(|f| f.name.to_lowercase() == name_lower)
+        self.fishes
+            .iter()
+            .find(|f| f.name.to_lowercase() == name_lower)
     }
-    
+
     /// Get fish by ID
     pub fn get_by_id(&self, id: &str) -> Option<&Fish> {
         let id_lower = id.to_lowercase();

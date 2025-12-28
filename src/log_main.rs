@@ -1,9 +1,9 @@
 //! Session logging functionality
 
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use chrono::Utc;
 
 use crate::utils::path::get_data_dir;
 
@@ -22,7 +22,7 @@ fn get_sessions_path() -> PathBuf {
 /// Load sessions from file
 pub fn load_sessions() -> Vec<Session> {
     let sessions_file = get_sessions_path();
-    
+
     if sessions_file.exists() {
         if let Ok(content) = fs::read_to_string(&sessions_file) {
             if let Ok(sessions) = serde_json::from_str(&content) {
@@ -30,18 +30,18 @@ pub fn load_sessions() -> Vec<Session> {
             }
         }
     }
-    
+
     Vec::new()
 }
 
 /// Save sessions to file
 pub fn save_sessions(sessions: &[Session]) {
     let sessions_file = get_sessions_path();
-    
+
     if let Some(parent) = sessions_file.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    
+
     if let Ok(content) = serde_json::to_string_pretty(sessions) {
         let _ = fs::write(&sessions_file, content);
     }
@@ -67,17 +67,17 @@ pub struct BrokenRodLogEntry {
 /// Log a catch to the fishing log
 pub fn log_catch(status: bool, fish_type: Option<String>) {
     let log_file = get_data_dir().join("logs").join("fishing_log.json");
-    
+
     if let Some(parent) = log_file.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    
+
     let entry = CatchLogEntry {
         timestamp: Utc::now().to_rfc3339(),
         status,
         fish_type,
     };
-    
+
     let mut data: Vec<CatchLogEntry> = if log_file.exists() {
         fs::read_to_string(&log_file)
             .ok()
@@ -86,9 +86,9 @@ pub fn log_catch(status: bool, fish_type: Option<String>) {
     } else {
         Vec::new()
     };
-    
+
     data.push(entry);
-    
+
     if let Ok(content) = serde_json::to_string_pretty(&data) {
         let _ = fs::write(&log_file, content);
     }
@@ -97,16 +97,16 @@ pub fn log_catch(status: bool, fish_type: Option<String>) {
 /// Log a broken rod
 pub fn log_broken_rod() {
     let log_file = get_data_dir().join("logs").join("broken_rods.json");
-    
+
     if let Some(parent) = log_file.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    
+
     let entry = BrokenRodLogEntry {
         timestamp: Utc::now().to_rfc3339(),
         broken: true,
     };
-    
+
     let mut data: Vec<BrokenRodLogEntry> = if log_file.exists() {
         fs::read_to_string(&log_file)
             .ok()
@@ -115,9 +115,9 @@ pub fn log_broken_rod() {
     } else {
         Vec::new()
     };
-    
+
     data.push(entry);
-    
+
     if let Ok(content) = serde_json::to_string_pretty(&data) {
         let _ = fs::write(&log_file, content);
     }

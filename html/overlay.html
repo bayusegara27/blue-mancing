@@ -595,6 +595,21 @@
       }
     });
 
+    // Update overlay settings from dashboard (called from Rust)
+    window.updateOverlaySettings = function(settings) {
+      // Handle show debug setting
+      if (typeof settings.showDebug !== 'undefined') {
+        debugVisible = settings.showDebug;
+        if (debugVisible) {
+          activitySection.classList.remove('hidden');
+          debugToggleBtn.classList.add('active');
+        } else {
+          activitySection.classList.add('hidden');
+          debugToggleBtn.classList.remove('active');
+        }
+      }
+    };
+
     // Legacy pywebview compatibility
     window.pywebview = {
       api: {
