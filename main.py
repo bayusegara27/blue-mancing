@@ -376,8 +376,12 @@ def post_catch_loop(window_title):
                         break
 
                 # Release any held movement keys before returning
-                release_key(get_pykey("left_key"))
-                release_key(get_pykey("right_key"))
+                left_key = get_pykey("left_key")
+                right_key = get_pykey("right_key")
+                if left_key:
+                    release_key(left_key)
+                if right_key:
+                    release_key(right_key)
                 
                 return
 
@@ -385,8 +389,12 @@ def post_catch_loop(window_title):
                 print("Default screen detected, minigame failed. Releasing click.")
                 mouse.release(Button.left)
                 # Release any held movement keys before returning
-                release_key(get_pykey("left_key"))
-                release_key(get_pykey("right_key"))
+                left_key = get_pykey("left_key")
+                right_key = get_pykey("right_key")
+                if left_key:
+                    release_key(left_key)
+                if right_key:
+                    release_key(right_key)
                 log_catch(False)
                 session_stats["misses"] += 1
                 total = session_stats["catches"] + session_stats["misses"]
@@ -532,8 +540,12 @@ def handle_no_progress_loop(window_title):
 
     # Release mouse button and any held movement keys before recovery
     mouse.release(Button.left)
-    release_key(get_pykey("left_key"))
-    release_key(get_pykey("right_key"))
+    left_key = get_pykey("left_key")
+    right_key = get_pykey("right_key")
+    if left_key:
+        release_key(left_key)
+    if right_key:
+        release_key(right_key)
 
     esc_key = get_key("esc_key")
     fish_key = get_key("fish_key")
