@@ -88,6 +88,11 @@ impl ImageService {
         image_path: &Path,
         threshold: f32,
     ) -> Option<(i32, i32)> {
+        let image_name = image_path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        tracing::trace!("[IMAGE] find_image_in_window('{}', threshold={:.2})", image_name, threshold);
+        
         let window_rect = window_rect?;
         let (x1, y1, x2, y2) = window_rect;
         let w = (x2 - x1).max(0) as u32;
@@ -107,12 +112,13 @@ impl ImageService {
         // Load template
         let template = Self::load_template_grayscale(image_path).ok()?;
         if template.empty() {
-            tracing::warn!("Template not found: {:?}", image_path);
+            tracing::warn!("[IMAGE] Template not found or empty: {:?}", image_path);
             return None;
         }
         
         // Skip if template is larger than image
         if template.cols() >= img_mat.cols() || template.rows() >= img_mat.rows() {
+            tracing::trace!("[IMAGE] Template larger than image, skipping");
             return None;
         }
         
@@ -144,9 +150,13 @@ impl ImageService {
         if max_val >= threshold as f64 {
             let click_x = x1 + max_loc.x + template.cols() / 2;
             let click_y = y1 + max_loc.y + template.rows() / 2;
+            tracing::debug!("[IMAGE] FOUND '{}' at ({}, {}) with score={:.3} >= threshold={:.2}", 
+                image_name, click_x, click_y, max_val, threshold);
             return Some((click_x, click_y));
         }
         
+        tracing::trace!("[IMAGE] '{}' NOT FOUND - score={:.3} < threshold={:.2}", 
+            image_name, max_val, threshold);
         None
     }
     
