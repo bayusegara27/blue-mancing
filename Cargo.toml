@@ -1,6 +1,6 @@
 [package]
 name = "blue-mancing"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2021"
 description = "Auto fishing bot for Blue Protocol: Star Resonance"
 authors = ["bayusegara27"]
@@ -40,7 +40,7 @@ anyhow = "1.0"
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Path handling
 directories = "5.0"

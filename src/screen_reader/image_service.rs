@@ -222,18 +222,22 @@ impl ImageService {
         let (h, w) = (img.height(), img.width());
         tracing::debug!("[FISH_DETECT] Image size: {}x{}", w, h);
 
-        // Crop area for fish name detection
-        let crop_x1 = (w as f32 * 0.56) as u32;
-        let crop_y1 = (h as f32 * 0.66) as u32;
-        let crop_w = (w as f32 * 0.30) as u32;
-        let crop_h = (h as f32 * 0.08) as u32;
+        // Crop area for fish image detection - centered on the fish result display area
+        // The fish image appears in the right side of the screen after catching
+        // Using a larger region to accommodate full fish images (~300-400px wide, ~200-300px tall)
+        let crop_x1 = (w as f32 * 0.50) as u32; // Start from 50% of screen width
+        let crop_y1 = (h as f32 * 0.35) as u32; // Start from 35% of screen height
+        let crop_w = (w as f32 * 0.45) as u32; // 45% of screen width
+        let crop_h = (h as f32 * 0.45) as u32; // 45% of screen height
 
-        tracing::debug!(
-            "[FISH_DETECT] Crop region: x={}, y={}, w={}, h={}",
+        tracing::info!(
+            "[FISH_DETECT] Crop region: x={}, y={}, w={}, h={} (image: {}x{})",
             crop_x1,
             crop_y1,
             crop_w,
-            crop_h
+            crop_h,
+            w,
+            h
         );
 
         let crop = image::imageops::crop_imm(&img, crop_x1, crop_y1, crop_w, crop_h).to_image();
@@ -260,15 +264,26 @@ impl ImageService {
             return (None, 0.0);
         }
 
-        tracing::debug!(
-            "[FISH_DETECT] Scanning fish templates from: {:?}",
+        tracing::info!(
+            "[FISH_DETECT] OpenCV template matching using fish templates from: {:?}",
             fish_folder
+        );
+        tracing::info!(
+            "[FISH_DETECT] NOTE: Detection uses template images (PNG files), fish_config.json is used for XP values and validation"
         );
 
         let mut best_fish: Option<String> = None;
         let mut best_score = 0.0f32;
         let mut template_count = 0;
+        let mut skipped_count = 0;
         let mut top_matches: Vec<(String, f32)> = Vec::new();
+
+        // Log crop mat dimensions once
+        tracing::debug!(
+            "[FISH_DETECT] Crop mat dimensions: {}x{}",
+            crop_mat.cols(),
+            crop_mat.rows()
+        );
 
         if let Ok(entries) = fs::read_dir(&fish_folder) {
             for entry in entries.flatten() {
@@ -287,19 +302,32 @@ impl ImageService {
                 // Load template with OpenCV
                 let template = match Self::load_template_grayscale(&path) {
                     Ok(t) => t,
-                    Err(_) => continue,
+                    Err(e) => {
+                        tracing::debug!(
+                            "[FISH_DETECT] Failed to load template '{}': {:?}",
+                            template_name,
+                            e
+                        );
+                        continue;
+                    }
                 };
 
                 if template.empty() {
+                    tracing::debug!("[FISH_DETECT] Template '{}' is empty", template_name);
                     continue;
                 }
 
                 // Skip if template is larger than crop
                 if template.cols() >= crop_mat.cols() || template.rows() >= crop_mat.rows() {
-                    tracing::trace!(
-                        "[FISH_DETECT] Template '{}' too large, skipping",
-                        template_name
+                    tracing::debug!(
+                        "[FISH_DETECT] Template '{}' too large ({}x{}) for crop ({}x{}), skipping",
+                        template_name,
+                        template.cols(),
+                        template.rows(),
+                        crop_mat.cols(),
+                        crop_mat.rows()
                     );
+                    skipped_count += 1;
                     continue;
                 }
 
@@ -326,8 +354,8 @@ impl ImageService {
 
                 let score = max_val as f32;
 
-                // Track top matches for debugging
-                if score > 0.5 {
+                // Track top matches for debugging - lower threshold to see more matches
+                if score > 0.3 {
                     top_matches.push((template_name.clone(), score));
                 }
 
@@ -343,11 +371,14 @@ impl ImageService {
         if !top_matches.is_empty() {
             let top_5: Vec<_> = top_matches.iter().take(5).collect();
             tracing::info!("[FISH_DETECT] Top matches: {:?}", top_5);
+        } else {
+            tracing::warn!("[FISH_DETECT] No matches found above threshold 0.3");
         }
 
         tracing::info!(
-            "[FISH_DETECT] Scanned {} templates, best match: {:?} (score: {:.3})",
+            "[FISH_DETECT] Scanned {} templates ({} skipped as too large), best match: {:?} (score: {:.3})",
             template_count,
+            skipped_count,
             best_fish,
             best_score
         );

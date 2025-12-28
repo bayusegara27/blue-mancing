@@ -391,22 +391,53 @@ fn post_catch_loop(
                     .join("fish");
                 let mut fish_type: Option<String> = None;
 
+                // Wait a bit for the fish result screen to fully render
+                thread::sleep(Duration::from_millis(500));
+
                 if fish_folder.exists() {
                     tracing::debug!("[FISH] Fish folder exists: {:?}", fish_folder);
-                    for attempt in 0..3 {
-                        tracing::debug!("[FISH] Detection attempt {}/3...", attempt + 1);
-                        println!("[FISH] Detection attempt {}/3...", attempt + 1);
+
+                    // Increase attempts to 5 and wait longer between attempts
+                    let max_attempts = 5;
+                    for attempt in 0..max_attempts {
+                        tracing::debug!(
+                            "[FISH] Detection attempt {}/{}...",
+                            attempt + 1,
+                            max_attempts
+                        );
+                        println!(
+                            "[FISH] Detection attempt {}/{}...",
+                            attempt + 1,
+                            max_attempts
+                        );
                         SHARED_STATE.set_detail_message(format!(
-                            "Detecting fish (attempt {}/3)...",
-                            attempt + 1
+                            "Detecting fish (attempt {}/{})...",
+                            attempt + 1,
+                            max_attempts
                         ));
                         let (detected, score) =
                             image_service.find_best_matching_fish(Some(rect), None);
                         if let Some(ref ft) = detected {
                             tracing::info!("[FISH] Found match: '{}' with score={:.3}", ft, score);
                             println!("[FISH] Found match: '{}' with score={:.3}", ft, score);
-                            // Lower threshold from 0.7 to 0.6 for better detection
-                            if score >= 0.6 {
+
+                            // Validate detected fish against fish_config.json
+                            let exists_in_config = fish_service.fish_exists(ft);
+                            tracing::info!(
+                                "[CONFIG_VALIDATION] Fish '{}' exists in fish_config.json: {}",
+                                ft,
+                                exists_in_config
+                            );
+                            if !exists_in_config {
+                                tracing::warn!(
+                                    "[CONFIG_VALIDATION] WARNING: Detected fish '{}' not found in fish_config.json",
+                                    ft
+                                );
+                                println!("[CONFIG] ⚠ Fish '{}' not found in fish_config.json", ft);
+                            }
+
+                            // Lower threshold to 0.5 for better detection
+                            if score >= 0.5 {
                                 tracing::info!(
                                     "[FISH] Fish detected: '{}' (score: {:.3})",
                                     ft,
@@ -425,11 +456,11 @@ fn post_catch_loop(
                                 break;
                             } else {
                                 tracing::debug!(
-                                    "[FISH] Score {:.3} below threshold 0.6, retrying...",
+                                    "[FISH] Score {:.3} below threshold 0.5, retrying...",
                                     score
                                 );
                                 println!(
-                                    "[FISH] Score {:.3} below threshold 0.6, retrying...",
+                                    "[FISH] Score {:.3} below threshold 0.5, retrying...",
                                     score
                                 );
                             }
@@ -440,13 +471,20 @@ fn post_catch_loop(
                             );
                             println!("[FISH] No fish match found on attempt {}", attempt + 1);
                         }
-                        thread::sleep(Duration::from_millis(200));
+                        // Wait longer between attempts (500ms instead of 200ms)
+                        thread::sleep(Duration::from_millis(500));
                     }
 
                     // Log final result
                     if fish_type.is_none() {
-                        tracing::warn!("[FISH] Failed to detect fish type after 3 attempts");
-                        println!("[FISH] ✗ Failed to detect fish type after 3 attempts");
+                        tracing::warn!(
+                            "[FISH] Failed to detect fish type after {} attempts",
+                            max_attempts
+                        );
+                        println!(
+                            "[FISH] ✗ Failed to detect fish type after {} attempts",
+                            max_attempts
+                        );
                     }
                 } else {
                     tracing::warn!("[FISH] Fish folder does not exist: {:?}", fish_folder);
@@ -457,7 +495,13 @@ fn post_catch_loop(
                 {
                     let mut stats = state.session_stats.lock();
                     let xp = if let Some(ref ft) = fish_type {
-                        fish_service.get_xp_by_type(ft)
+                        let xp_value = fish_service.get_xp_by_type(ft);
+                        tracing::info!(
+                            "[CONFIG] XP lookup for '{}' from fish_config.json: {}",
+                            ft,
+                            xp_value
+                        );
+                        xp_value
                     } else {
                         1
                     };
@@ -908,8 +952,52 @@ fn main_loop(state: Arc<MacroState>, image_service: ImageService, fish_service: 
 }
 
 fn main() {
-    // Initialize logging
-    tracing_subscriber::fmt::init();
+    // Initialize logging with file output to debug/log folder
+    let base = get_data_dir();
+    let log_dir = base.join("debug").join("log");
+    let _ = std::fs::create_dir_all(&log_dir);
+
+    // Create a file appender for debug logs
+    let log_file_path = log_dir.join("debug.log");
+    let file_result = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file_path);
+
+    // Configure logging with both stdout and file output
+    use tracing_subscriber::fmt::format::FmtSpan;
+    use tracing_subscriber::prelude::*;
+
+    match file_result {
+        Ok(file) => {
+            let file_layer = tracing_subscriber::fmt::layer()
+                .with_writer(std::sync::Mutex::new(file))
+                .with_ansi(false)
+                .with_span_events(FmtSpan::CLOSE);
+
+            let stdout_layer = tracing_subscriber::fmt::layer().with_span_events(FmtSpan::CLOSE);
+
+            tracing_subscriber::registry()
+                .with(file_layer)
+                .with(stdout_layer)
+                .init();
+
+            tracing::info!("[INIT] Debug logging enabled at: {:?}", log_file_path);
+        }
+        Err(e) => {
+            tracing_subscriber::fmt::init();
+            // Log the specific error for debugging
+            eprintln!(
+                "[INIT] Failed to create debug log file at {:?}: {}",
+                log_file_path, e
+            );
+            tracing::warn!(
+                "[INIT] Failed to create debug log file at {:?}: {}, using stdout only",
+                log_file_path,
+                e
+            );
+        }
+    }
 
     tracing::info!("========================================");
     tracing::info!("Blue Mancing {} - Starting up", APP_VERSION);
@@ -943,15 +1031,18 @@ fn main() {
     // Initialize services
     tracing::info!("[INIT] Loading configuration...");
     SHARED_STATE.set_detail_message("Loading configuration...");
-    let base = get_data_dir();
+    // Reuse base from logging initialization above
     let config_path = base.join("config").join("fish_config.json");
     tracing::debug!("[INIT] Config path: {:?}", config_path);
 
-    let mut fish_service = FishService::new(config_path);
+    let mut fish_service = FishService::new(config_path.clone());
     if let Err(e) = fish_service.load_fishes() {
         tracing::warn!("[INIT] Failed to load fish config: {}", e);
+        tracing::warn!("[CONFIG] Fish config path: {:?}", config_path);
     } else {
         tracing::info!("[INIT] Fish config loaded successfully");
+        tracing::info!("[CONFIG] Fish config: {:?}", config_path);
+        tracing::info!("[CONFIG] Total fish entries: {}", fish_service.count());
     }
 
     tracing::debug!("[INIT] Creating ImageService...");
