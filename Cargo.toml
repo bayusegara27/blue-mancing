@@ -19,7 +19,7 @@ serde_json = "1.0"
 
 # Image processing
 image = "0.25"
-imageproc = "0.25"
+opencv = { version = "0.93", default-features = true }
 
 # Screen capture
 screenshots = "0.8"

@@ -5,8 +5,13 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::time::Duration;
-use image::{GrayImage, Luma};
-use imageproc::template_matching::{match_template, find_extremes, MatchTemplateMethod};
+use image::GrayImage;
+use opencv::{
+    core::{Mat, MatTraitConst, Point, CV_8UC1, CV_32FC1, min_max_loc, no_array, Scalar},
+    imgcodecs,
+    imgproc,
+    prelude::*,
+};
 
 use super::screen_service::{ScreenService, Region};
 use super::base::get_resolution_folder;
@@ -35,6 +40,46 @@ impl ImageService {
         self.resolution_folder = get_resolution_folder();
     }
     
+    /// Convert image::GrayImage to OpenCV Mat
+    fn gray_image_to_mat(img: &GrayImage) -> opencv::Result<Mat> {
+        let (width, height) = (img.width() as i32, img.height() as i32);
+        let data = img.as_raw();
+        
+        // Create a Mat by copying the data to ensure proper ownership
+        // Step parameter is width * 1 byte per pixel for single-channel grayscale (CV_8UC1)
+        let step = width as usize * 1;  // 1 byte per pixel for 8-bit grayscale
+        let mat = unsafe {
+            Mat::new_rows_cols_with_data_unsafe(
+                height,
+                width,
+                CV_8UC1,
+                data.as_ptr() as *mut std::ffi::c_void,
+                step,
+            )?
+        };
+        
+        // Clone the Mat to ensure the data is owned by the Mat
+        // This is necessary because the original data is owned by the GrayImage
+        let owned_mat = mat.clone();
+        Ok(owned_mat)
+    }
+    
+    /// Load image as OpenCV Mat in grayscale
+    fn load_template_grayscale(path: &Path) -> opencv::Result<Mat> {
+        let path_str = path.to_str().ok_or_else(|| {
+            opencv::Error::new(opencv::core::StsError, "Invalid path: non-UTF8 characters")
+        })?;
+        imgcodecs::imread(path_str, imgcodecs::IMREAD_GRAYSCALE)
+    }
+    
+    /// Load image with alpha channel
+    fn load_template_unchanged(path: &Path) -> opencv::Result<Mat> {
+        let path_str = path.to_str().ok_or_else(|| {
+            opencv::Error::new(opencv::core::StsError, "Invalid path: non-UTF8 characters")
+        })?;
+        imgcodecs::imread(path_str, imgcodecs::IMREAD_UNCHANGED)
+    }
+    
     /// Find a single image on the screen within a given window rectangle
     /// Returns center coordinates if found, else None
     pub fn find_image_in_window(
@@ -56,29 +101,49 @@ impl ImageService {
         
         let img_gray = screenshot.to_luma8();
         
-        // Load template
-        let template = match image::open(image_path) {
-            Ok(t) => t.to_luma8(),
-            Err(e) => {
-                tracing::warn!("Template not found: {:?}: {}", image_path, e);
-                return None;
-            }
-        };
+        // Convert to OpenCV Mat
+        let img_mat = Self::gray_image_to_mat(&img_gray).ok()?;
         
-        // Skip if template is larger than image
-        if template.width() >= img_gray.width() || template.height() >= img_gray.height() {
+        // Load template
+        let template = Self::load_template_grayscale(image_path).ok()?;
+        if template.empty() {
+            tracing::warn!("Template not found: {:?}", image_path);
             return None;
         }
         
-        // Use imageproc's optimized template matching with CrossCorrelationNormalized
-        // Values are normalized to [0, 1] range where higher values indicate better match
-        let result = match_template(&img_gray, &template, MatchTemplateMethod::CrossCorrelationNormalized);
-        let extremes = find_extremes(&result);
+        // Skip if template is larger than image
+        if template.cols() >= img_mat.cols() || template.rows() >= img_mat.rows() {
+            return None;
+        }
         
-        if extremes.max_value >= threshold {
-            let (max_x, max_y) = extremes.max_value_location;
-            let click_x = x1 + max_x as i32 + template.width() as i32 / 2;
-            let click_y = y1 + max_y as i32 + template.height() as i32 / 2;
+        // Perform template matching using TM_CCOEFF_NORMED (same as Python cv2.TM_CCOEFF_NORMED)
+        let mut result = Mat::default();
+        imgproc::match_template(
+            &img_mat,
+            &template,
+            &mut result,
+            imgproc::TM_CCOEFF_NORMED,
+            &no_array(),
+        ).ok()?;
+        
+        // Find maximum value and location
+        let mut min_val = 0.0;
+        let mut max_val = 0.0;
+        let mut min_loc = Point::new(0, 0);
+        let mut max_loc = Point::new(0, 0);
+        
+        min_max_loc(
+            &result,
+            Some(&mut min_val),
+            Some(&mut max_val),
+            Some(&mut min_loc),
+            Some(&mut max_loc),
+            &no_array(),
+        ).ok()?;
+        
+        if max_val >= threshold as f64 {
+            let click_x = x1 + max_loc.x + template.cols() / 2;
+            let click_y = y1 + max_loc.y + template.rows() / 2;
             return Some((click_x, click_y));
         }
         
@@ -123,9 +188,11 @@ impl ImageService {
         
         let crop = image::imageops::crop_imm(&img, crop_x1, crop_y1, crop_w, crop_h).to_image();
         
-        // Simple text detection using template matching against fish name images
-        // In a full implementation, this would use OCR (tesseract)
-        // For now, we use template matching against known fish name patterns
+        // Convert cropped image to OpenCV Mat
+        let crop_mat = match Self::gray_image_to_mat(&crop) {
+            Ok(m) => m,
+            Err(_) => return (None, 0.0),
+        };
         
         let fish_folder = self.target_images_folder
             .join(&self.resolution_folder)
@@ -145,22 +212,49 @@ impl ImageService {
                     continue;
                 }
                 
-                if let Ok(template) = image::open(&path) {
-                    let template_gray = template.to_luma8();
-                    
-                    // Skip if template is larger than crop
-                    if template_gray.width() >= crop.width() || template_gray.height() >= crop.height() {
-                        continue;
-                    }
-                    
-                    // Use imageproc's optimized template matching
-                    let result = match_template(&crop, &template_gray, MatchTemplateMethod::CrossCorrelationNormalized);
-                    let extremes = find_extremes(&result);
-                    
-                    if extremes.max_value > best_score {
-                        best_score = extremes.max_value;
-                        best_fish = path.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string());
-                    }
+                // Load template with OpenCV
+                let template = match Self::load_template_grayscale(&path) {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
+                
+                if template.empty() {
+                    continue;
+                }
+                
+                // Skip if template is larger than crop
+                if template.cols() >= crop_mat.cols() || template.rows() >= crop_mat.rows() {
+                    continue;
+                }
+                
+                // Perform template matching using TM_CCOEFF_NORMED
+                let mut result = Mat::default();
+                if imgproc::match_template(
+                    &crop_mat,
+                    &template,
+                    &mut result,
+                    imgproc::TM_CCOEFF_NORMED,
+                    &no_array(),
+                ).is_err() {
+                    continue;
+                }
+                
+                // Find maximum value
+                let mut max_val = 0.0;
+                if min_max_loc(
+                    &result,
+                    None,
+                    Some(&mut max_val),
+                    None,
+                    None,
+                    &no_array(),
+                ).is_err() {
+                    continue;
+                }
+                
+                if max_val as f32 > best_score {
+                    best_score = max_val as f32;
+                    best_fish = path.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string());
                 }
             }
         }
@@ -197,6 +291,12 @@ impl ImageService {
         
         let img_crop = image::imageops::crop_imm(&img, crop_x1, crop_y1, crop_width, crop_height).to_image();
         
+        // Convert cropped image to OpenCV Mat
+        let crop_mat = match Self::gray_image_to_mat(&img_crop) {
+            Ok(m) => m,
+            Err(_) => return (None, 0.0),
+        };
+        
         let arrow_folder = self.target_images_folder.join(&self.resolution_folder);
         
         let templates = ["left-high.png", "right-high.png"];
@@ -209,22 +309,115 @@ impl ImageService {
                 continue;
             }
             
-            if let Ok(template_img) = image::open(&template_path) {
-                let template = template_img.to_luma8();
-                
-                // Skip if template is larger than crop
-                if template.width() >= img_crop.width() || template.height() >= img_crop.height() {
+            // Load template with alpha channel support (like Python cv2.IMREAD_UNCHANGED)
+            let template_img = match Self::load_template_unchanged(&template_path) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            
+            if template_img.empty() {
+                continue;
+            }
+            
+            // Handle alpha channel if present (4-channel image)
+            let (template, mask): (Mat, Option<Mat>) = if template_img.channels() == 4 {
+                // Extract BGR and alpha channel
+                let mut channels = opencv::core::Vector::<Mat>::new();
+                if opencv::core::split(&template_img, &mut channels).is_err() {
                     continue;
                 }
                 
-                // Use imageproc's optimized template matching
-                let result = match_template(&img_crop, &template, MatchTemplateMethod::CrossCorrelationNormalized);
-                let extremes = find_extremes(&result);
-                
-                if extremes.max_value > best_score {
-                    best_score = extremes.max_value;
-                    best_match = Some(template_name.replace(".png", ""));
+                // Verify we have at least 4 channels
+                if channels.len() < 4 {
+                    continue;
                 }
+                
+                // Convert BGR to grayscale
+                let mut bgr = Mat::default();
+                let mut gray = Mat::default();
+                
+                // Merge BGR channels (first 3) - explicitly get each channel
+                let ch0 = match channels.get(0) { Ok(c) => c, Err(_) => continue };
+                let ch1 = match channels.get(1) { Ok(c) => c, Err(_) => continue };
+                let ch2 = match channels.get(2) { Ok(c) => c, Err(_) => continue };
+                let bgr_channels = opencv::core::Vector::<Mat>::from_iter([ch0, ch1, ch2]);
+                
+                if opencv::core::merge(&bgr_channels, &mut bgr).is_err() {
+                    continue;
+                }
+                
+                if imgproc::cvt_color(&bgr, &mut gray, imgproc::COLOR_BGR2GRAY, 0).is_err() {
+                    continue;
+                }
+                
+                // Create mask from alpha channel (alpha > 0)
+                let alpha = match channels.get(3) {
+                    Ok(a) => a,
+                    Err(_) => continue,
+                };
+                let mut mask = Mat::default();
+                if imgproc::threshold(&alpha, &mut mask, 1.0, 255.0, imgproc::THRESH_BINARY).is_err() {
+                    continue;
+                }
+                
+                (gray, Some(mask))
+            } else {
+                // Convert to grayscale if not already
+                let mut gray = Mat::default();
+                if template_img.channels() == 3 {
+                    if imgproc::cvt_color(&template_img, &mut gray, imgproc::COLOR_BGR2GRAY, 0).is_err() {
+                        continue;
+                    }
+                } else {
+                    gray = template_img;
+                }
+                (gray, None)
+            };
+            
+            // Skip if template is larger than crop
+            if template.cols() >= crop_mat.cols() || template.rows() >= crop_mat.rows() {
+                continue;
+            }
+            
+            // Perform template matching with optional mask
+            let mut result = Mat::default();
+            let match_result = match &mask {
+                Some(m) => imgproc::match_template(
+                    &crop_mat,
+                    &template,
+                    &mut result,
+                    imgproc::TM_CCOEFF_NORMED,
+                    m,
+                ),
+                None => imgproc::match_template(
+                    &crop_mat,
+                    &template,
+                    &mut result,
+                    imgproc::TM_CCOEFF_NORMED,
+                    &no_array(),
+                ),
+            };
+            
+            if match_result.is_err() {
+                continue;
+            }
+            
+            // Find maximum value
+            let mut max_val = 0.0;
+            if min_max_loc(
+                &result,
+                None,
+                Some(&mut max_val),
+                None,
+                None,
+                &no_array(),
+            ).is_err() {
+                continue;
+            }
+            
+            if max_val as f32 > best_score {
+                best_score = max_val as f32;
+                best_match = Some(template_name.replace(".png", ""));
             }
         }
         
@@ -248,6 +441,7 @@ impl Default for ImageService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::Luma;
 
     #[test]
     fn test_image_service_new() {
@@ -263,52 +457,77 @@ mod tests {
     }
     
     #[test]
-    fn test_match_template_exact_match() {
-        // Create a simple 10x10 image with a pattern
+    fn test_gray_image_to_mat() {
+        // Create a simple 10x10 grayscale image
         let mut img = GrayImage::new(10, 10);
         for y in 0..10 {
             for x in 0..10 {
-                // Use modulo to avoid overflow
                 img.put_pixel(x, y, Luma([((x + y) * 12 % 256) as u8]));
             }
         }
         
-        // Create a 3x3 template from the center of the image
-        let template = image::imageops::crop_imm(&img, 3, 3, 3, 3).to_image();
+        // Convert to Mat
+        let mat = ImageService::gray_image_to_mat(&img);
+        assert!(mat.is_ok());
         
-        // Use imageproc's match_template
-        let result = match_template(&img, &template, MatchTemplateMethod::CrossCorrelationNormalized);
-        let extremes = find_extremes(&result);
-        
-        // The score should be very close to 1.0 for exact match
-        assert!(extremes.max_value > 0.99, "Score {} should be > 0.99 for exact match", extremes.max_value);
-        // Location should be approximately where we cropped from
-        assert_eq!(extremes.max_value_location, (3, 3), "Location {:?} should be (3, 3)", extremes.max_value_location);
+        let mat = mat.unwrap();
+        assert_eq!(mat.cols(), 10);
+        assert_eq!(mat.rows(), 10);
     }
     
     #[test]
-    fn test_match_template_no_match() {
-        // Create a gradient image
+    fn test_opencv_template_matching() {
+        // Create a 20x20 image with a unique pattern at position (5,5)
         let mut img = GrayImage::new(20, 20);
+        
+        // Fill with gray background
         for y in 0..20 {
             for x in 0..20 {
-                img.put_pixel(x, y, Luma([(x * 10).min(255) as u8]));
+                img.put_pixel(x, y, Luma([128u8]));
             }
         }
         
-        // Create a template with inverted pattern (should not match well)
-        let mut template = GrayImage::new(5, 5);
-        for y in 0..5 {
-            for x in 0..5 {
-                template.put_pixel(x, y, Luma([(255 - (x * 40)).min(255) as u8]));
+        // Create a unique 5x5 pattern at position (5,5)
+        for dy in 0..5 {
+            for dx in 0..5 {
+                let val = (dx * 50 + dy * 40) as u8;
+                img.put_pixel(5 + dx, 5 + dy, Luma([val]));
             }
         }
         
-        // Use imageproc's match_template
-        let result = match_template(&img, &template, MatchTemplateMethod::CrossCorrelationNormalized);
-        let extremes = find_extremes(&result);
+        // Create the template from position (5,5)
+        let template_img = image::imageops::crop_imm(&img, 5, 5, 5, 5).to_image();
         
-        // Score should be low for poor match
-        assert!(extremes.max_value < 0.5, "Score {} should be < 0.5 for poor match", extremes.max_value);
+        // Convert both to Mat
+        let img_mat = ImageService::gray_image_to_mat(&img).unwrap();
+        let template_mat = ImageService::gray_image_to_mat(&template_img).unwrap();
+        
+        // Perform template matching
+        let mut result = Mat::default();
+        imgproc::match_template(
+            &img_mat,
+            &template_mat,
+            &mut result,
+            imgproc::TM_CCOEFF_NORMED,
+            &no_array(),
+        ).unwrap();
+        
+        // Find maximum value and location
+        let mut max_val = 0.0;
+        let mut max_loc = Point::new(0, 0);
+        min_max_loc(
+            &result,
+            None,
+            Some(&mut max_val),
+            None,
+            Some(&mut max_loc),
+            &no_array(),
+        ).unwrap();
+        
+        // The score should be very close to 1.0 for exact match
+        assert!(max_val > 0.99, "Score {} should be > 0.99 for exact match", max_val);
+        // Location should be approximately where we cropped from
+        assert_eq!(max_loc.x, 5, "X location {} should be 5", max_loc.x);
+        assert_eq!(max_loc.y, 5, "Y location {} should be 5", max_loc.y);
     }
 }
