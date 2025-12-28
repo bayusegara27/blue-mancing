@@ -107,11 +107,15 @@ def update_manifest(version: str) -> bool:
     file_path = ROOT_DIR / "blue-mancing.manifest"
     content = file_path.read_text()
     
+    # Validate version format (must be X.Y.Z)
+    if not re.match(r'^\d+\.\d+\.\d+$', version):
+        print(f"WARNING: Invalid version format '{version}' for manifest. Expected X.Y.Z")
+        return False
+    
     # Convert version to 4-part format (e.g., 2.0.0 -> 2.0.0.0)
     version_parts = version.split('.')
-    while len(version_parts) < 4:
-        version_parts.append('0')
-    manifest_version = '.'.join(version_parts[:4])
+    version_parts.append('0')  # Add 4th part
+    manifest_version = '.'.join(version_parts)
     
     # Match version attribute in assemblyIdentity tag specifically
     # Use multiline pattern to match the version line within assemblyIdentity
@@ -268,14 +272,21 @@ Examples:
         success = check_versions()
         sys.exit(0 if success else 1)
     elif args.set:
-        # Validate version format
+        # Validate version format (only X.Y.Z supported)
         if not re.match(r'^\d+\.\d+\.\d+$', args.set):
-            print(f"ERROR: Invalid version format '{args.set}'. Expected format: X.Y.Z (e.g., 2.1.0)")
+            print(f"ERROR: Invalid version format '{args.set}'.")
+            print("Expected format: X.Y.Z (e.g., 2.1.0)")
+            print("Note: Only basic three-part versions are supported.")
             sys.exit(1)
         write_version(args.set)
         sync_all(args.set)
     else:
         version = read_version()
+        # Also validate version from file
+        if not re.match(r'^\d+\.\d+\.\d+$', version):
+            print(f"ERROR: Invalid version in VERSION file: '{version}'")
+            print("Expected format: X.Y.Z (e.g., 2.0.0)")
+            sys.exit(1)
         sync_all(version)
 
 
