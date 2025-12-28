@@ -42,7 +42,7 @@ def write_version(version: str):
     """Write version to VERSION file."""
     version_file = ROOT_DIR / "VERSION"
     version_file.write_text(f"{version}\n")
-    print(f"✓ Updated VERSION file to {version}")
+    print(f"[OK] Updated VERSION file to {version}")
 
 
 def update_cargo_toml(version: str) -> bool:
@@ -56,7 +56,7 @@ def update_cargo_toml(version: str) -> bool:
     
     if content != new_content:
         file_path.write_text(new_content)
-        print(f"✓ Updated Cargo.toml to {version}")
+        print(f"[OK] Updated Cargo.toml to {version}")
         return True
     return False
 
@@ -81,7 +81,7 @@ def update_latest_json(version: str) -> bool:
         f.write('\n')
     
     if old_version != f"v{version}":
-        print(f"✓ Updated latest.json to v{version}")
+        print(f"[OK] Updated latest.json to v{version}")
         return True
     return False
 
@@ -97,7 +97,7 @@ def update_installer_nsi(version: str) -> bool:
     
     if content != new_content:
         file_path.write_text(new_content)
-        print(f"✓ Updated installer.nsi to {version}")
+        print(f"[OK] Updated installer.nsi to {version}")
         return True
     return False
 
@@ -124,7 +124,7 @@ def update_manifest(version: str) -> bool:
     
     if content != new_content:
         file_path.write_text(new_content)
-        print(f"✓ Updated blue-mancing.manifest to {manifest_version}")
+        print(f"[OK] Updated blue-mancing.manifest to {manifest_version}")
         return True
     return False
 
@@ -140,14 +140,14 @@ def update_main_html(version: str) -> bool:
     
     if content != new_content:
         file_path.write_text(new_content)
-        print(f"✓ Updated html/main.html to v{version}")
+        print(f"[OK] Updated html/main.html to v{version}")
         return True
     return False
 
 
 def sync_all(version: str):
     """Sync version to all files."""
-    print(f"\n🔄 Syncing version {version} to all files...\n")
+    print(f"\n[SYNC] Syncing version {version} to all files...\n")
     
     updated = []
     
@@ -163,9 +163,9 @@ def sync_all(version: str):
         updated.append("html/main.html")
     
     if updated:
-        print(f"\n✅ Updated {len(updated)} file(s)")
+        print(f"\n[SUCCESS] Updated {len(updated)} file(s)")
     else:
-        print("\n✅ All files already in sync")
+        print("\n[SUCCESS] All files already in sync")
     
     return len(updated)
 
@@ -173,7 +173,7 @@ def sync_all(version: str):
 def check_versions():
     """Check if all versions are in sync."""
     version = read_version()
-    print(f"\n🔍 Checking version sync (expected: {version})...\n")
+    print(f"\n[CHECK] Checking version sync (expected: {version})...\n")
     
     errors = []
     
@@ -186,7 +186,7 @@ def check_versions():
         if cargo_version != version:
             errors.append(f"Cargo.toml: {cargo_version} (expected {version})")
         else:
-            print(f"✓ Cargo.toml: {cargo_version}")
+            print(f"[OK] Cargo.toml: {cargo_version}")
     
     # Check latest.json
     latest_path = ROOT_DIR / "latest.json"
@@ -196,7 +196,7 @@ def check_versions():
     if latest_version != version:
         errors.append(f"latest.json: v{latest_version} (expected v{version})")
     else:
-        print(f"✓ latest.json: v{latest_version}")
+        print(f"[OK] latest.json: v{latest_version}")
     
     # Check installer.nsi
     nsi_path = ROOT_DIR / "installer.nsi"
@@ -207,7 +207,7 @@ def check_versions():
         if nsi_version != version:
             errors.append(f"installer.nsi: {nsi_version} (expected {version})")
         else:
-            print(f"✓ installer.nsi: {nsi_version}")
+            print(f"[OK] installer.nsi: {nsi_version}")
     
     # Check manifest
     manifest_path = ROOT_DIR / "blue-mancing.manifest"
@@ -220,7 +220,7 @@ def check_versions():
         if not manifest_version.startswith(version):
             errors.append(f"blue-mancing.manifest: {manifest_version} (expected {expected_manifest})")
         else:
-            print(f"✓ blue-mancing.manifest: {manifest_version}")
+            print(f"[OK] blue-mancing.manifest: {manifest_version}")
     
     # Check main.html
     html_path = ROOT_DIR / "html" / "main.html"
@@ -231,16 +231,16 @@ def check_versions():
         if html_version != version:
             errors.append(f"html/main.html: v{html_version} (expected v{version})")
         else:
-            print(f"✓ html/main.html: v{html_version}")
+            print(f"[OK] html/main.html: v{html_version}")
     
     if errors:
-        print(f"\n❌ Found {len(errors)} version mismatch(es):")
+        print(f"\n[ERROR] Found {len(errors)} version mismatch(es):")
         for error in errors:
             print(f"   - {error}")
         print("\nRun 'python scripts/sync_version.py' to fix.")
         return False
     else:
-        print("\n✅ All versions are in sync!")
+        print("\n[SUCCESS] All versions are in sync!")
         return True
 
 
