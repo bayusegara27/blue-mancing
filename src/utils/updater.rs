@@ -11,8 +11,8 @@ use parking_lot::Mutex;
 use serde::Deserialize;
 use anyhow::{Result, Context};
 
-/// Application version
-pub const APP_VERSION: &str = "v2.0.0";
+/// Application version - automatically set from VERSION file during build
+pub const APP_VERSION: &str = env!("APP_VERSION");
 
 /// URL to check for updates
 const LATEST_URL: &str = "https://raw.githubusercontent.com/bayusegara27/blue-mancing/main/latest.json";
