@@ -556,8 +556,8 @@ pub fn start_ui() {
             let message = request.body();
             // IPC handler processes requests but responses are preloaded in HTML
             // The response is logged for debugging purposes
-            let response = handle_dashboard_ipc(message);
-            tracing::debug!("Dashboard IPC: {} -> {}", message, response);
+            let _response = handle_dashboard_ipc(message);
+            // Note: IPC responses are handled via preloaded data, no need to log each call
         })
         .build(&main_window)
         .expect("Failed to create main webview");
