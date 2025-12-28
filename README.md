@@ -55,19 +55,51 @@ cargo run --release
 
 This project uses GitHub Actions to automatically build and publish releases.
 
+### Version Management
+
+The application version is managed centrally through the `VERSION` file. This ensures consistency across all project files.
+
+**Files that contain version information:**
+- `VERSION` - Single source of truth
+- `Cargo.toml` - Rust package version
+- `latest.json` - Update checker metadata
+- `installer.nsi` - Windows installer version
+- `blue-mancing.manifest` - Windows manifest version
+- `html/main.html` - UI version display
+
+**To update the version:**
+
+```bash
+# Set a new version and sync to all files
+python scripts/sync_version.py --set 2.1.0
+
+# Check if all versions are in sync
+python scripts/sync_version.py --check
+
+# Sync version from VERSION file to all other files
+python scripts/sync_version.py
+```
+
 ### Creating a New Release
 
-1. **Via Git Tag** (Recommended):
+1. **Update the version:**
    ```bash
-   git tag v2.0.0
-   git push origin v2.0.0
+   python scripts/sync_version.py --set 2.1.0
+   git add .
+   git commit -m "Bump version to 2.1.0"
+   ```
+
+2. **Via Git Tag** (Recommended):
+   ```bash
+   git tag v2.1.0
+   git push origin v2.1.0
    ```
    This will trigger the workflow and create a release automatically.
 
-2. **Via GitHub Actions UI**:
+3. **Via GitHub Actions UI**:
    - Go to Actions → "Build and Release"
    - Click "Run workflow"
-   - Enter the version number (e.g., `2.0.0`)
+   - Enter the version number (e.g., `2.1.0`)
    - Click "Run workflow"
 
 ## FAQ
